@@ -10,6 +10,7 @@ class SourceConfig(BaseModel):
     start_date: str
     output_folder: str
     output_file_pattern: str
+    is_date_to_previous_day: bool = True
 
     class ConfigDict:
         frozen = True
