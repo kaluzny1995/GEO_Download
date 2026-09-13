@@ -20,6 +20,11 @@ class DownloaderFactory:
             raise ValueError(f"No downloader registered for source type: {source_type}")
         return cls._registry[source_type](**kwargs)
 
+    @classmethod
+    def clear(cls) -> None:
+        """ Clears the registry (for testing) """
+        cls._registry.clear()
+
 
 def get_downloader(source_type_str: str, **kwargs):
     """ Helper function to get downloader by source type string """
