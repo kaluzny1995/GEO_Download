@@ -1,5 +1,2 @@
 requests>=2.31.0
-pandas>=2.1.0
-geopandas>=0.14.0
-folium>=0.15.0
-matplotlib>=3.8.0
+pydantic>=2.0.0

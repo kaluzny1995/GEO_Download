@@ -1,0 +1,13 @@
+{
+  "sources": {
+    "USGS_Earthquake": {
+      "type": "usgs_earthquake",
+      "enabled": true,
+      "api_url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
+      "feed_url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.csv",
+      "start_date": "2026-09-01",
+      "output_folder": "data/USGS_Earthquake",
+      "output_file_pattern": "earthquakes_{date}.csv"
+    }
+  }
+}
