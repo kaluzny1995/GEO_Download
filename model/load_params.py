@@ -21,7 +21,7 @@ class LoadParams(BaseModel):
 
         return LoadParams(
             load_type=ELoadType.HISTORICAL if recent_date is None else ELoadType.INCREMENTAL,
-            date_from=start_date if recent_date is None else recent_date,
+            date_from=start_date if recent_date is None else recent_date + dt.timedelta(days=1),
             date_to=dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(days=1)
             if source.is_date_to_previous_day
             else dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)

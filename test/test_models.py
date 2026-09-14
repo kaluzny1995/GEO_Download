@@ -202,4 +202,4 @@ def test_load_params_from_source_incremental(tmp_path):
 
     # Assert
     assert load_params.load_type == ELoadType.INCREMENTAL
-    assert load_params.date_from == dt.datetime(2026, 9, 5)
+    assert load_params.date_from == dt.datetime(2026, 9, 6)
