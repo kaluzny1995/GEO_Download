@@ -79,3 +79,14 @@ def test_register_overwrite():
 
     # Assert
     assert isinstance(downloader, AnotherMockDownloader)
+
+
+def test_register_smithsonian_gvp():
+    # Arrange
+    DownloaderFactory.register(ESourceType.SMITHSONIAN_GVP, MockDownloader)
+
+    # Act
+    downloader = DownloaderFactory.create(ESourceType.SMITHSONIAN_GVP)
+
+    # Assert
+    assert isinstance(downloader, MockDownloader)

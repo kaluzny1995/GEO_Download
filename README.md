@@ -9,7 +9,7 @@ GEO_Download fetches data from public geospatial APIs and saves it locally as da
 | Source | API | Data |
 |--------|-----|------|
 | USGS Earthquake | [FDSN Event Query](https://earthquake.usgs.gov/fdsnws/event/1/query) | Seismic events (lat/lon, depth, magnitude, place) |
-| USGS Volcano Alerts | [HANS API](https://volcanoes.usgs.gov/hans-public/api/) | Volcano notices (alert level, color code, country code, lat/lon) |
+| Smithsonian GVP | [volcview API](https://volcview.wr.usgs.gov) + [BigDataCloud](https://www.bigdatacloud.com) | Worldwide volcanoes (vnum, lat/lon, elevation, observatory, country code/name) |
 
 Both sources support two loading modes:
 
@@ -55,26 +55,26 @@ GEO_Download/
 │   ├── source_config.py       # SourceConfig — per-source settings
 │   ├── download_params.py     # DownloadParams — download parameters
 │   ├── load_params.py         # LoadParams — determines load type and date range
-│   ├── e_source_type.py       # ESourceType enum (usgs_earthquake, usgs_volcano_alerts)
+│   ├── e_source_type.py       # ESourceType enum (usgs_earthquake, smithsonian_gvp)
 │   └── e_load_type.py         # ELoadType enum (HISTORICAL / INCREMENTAL)
 ├── downloader/                # Downloader classes (base + concrete implementations)
 │   ├── __init__.py            # Imports + factory registrations
 │   ├── base.py                # BaseDownloader — abstract base class
 │   ├── usgs_earthquake.py     # USGSEarthquakeDownloader
-│   └── usgs_volcano.py        # USGSVolcanoDownloader
+│   └── smithsonian_gvp.py     # SmithsonianGVPDownloader
 ├── test/                      # Unit tests
 │   ├── test_base_downloader.py
 │   ├── test_models.py
 │   ├── test_downloader_factory.py
 │   ├── test_util.py
 │   ├── test_usgs_downloader.py
-│   └── test_usgs_volcano_downloader.py
+│   └── test_smithsonian_gvp_downloader.py
 ├── data/                      # Downloaded CSV files (per source subfolder)
 │   ├── USGS_Earthquake/
-│   └── USGS_Volcano_Alerts/
+│   └── Smithsonian_GVP/
 └── logs/                      # Timestamped log files (per source subfolder)
     ├── USGS_Earthquake/
-    └── USGS_Volcano_Alerts/
+    └── Smithsonian_GVP/
 ```
 
 ## Configuration
@@ -93,13 +93,13 @@ The application is configured via `config.json`. Each data source is defined und
       "output_file_pattern": "earthquakes_{date}.csv",
       "is_date_to_previous_day": true
     },
-    "USGS_Volcano_Alerts": {
-      "type": "usgs_volcano_alerts",
+    "Smithsonian_GVP": {
+      "type": "smithsonian_gvp",
       "enabled": true,
-      "api_url": "https://volcanoes.usgs.gov/hans-public/api/notice/getRecentNotices",
+      "api_url": "https://volcview.wr.usgs.gov/vv-api/volcanoApi/wwvolcanoes",
       "start_date": "2026-09-01",
-      "output_folder": "data/USGS_Volcano_Alerts",
-      "output_file_pattern": "volcano_alerts_{date}.csv",
+      "output_folder": "data/Smithsonian_GVP",
+      "output_file_pattern": "volcanoes_{date}.csv",
       "is_date_to_previous_day": true
     }
   }
@@ -131,7 +131,7 @@ conda activate geo_download_311
 python run_download.py <source_name>
 ```
 
-Where `<source_name>` matches a key in `config.json` (e.g. `USGS_Earthquake`, `USGS_Volcano_Alerts`).
+Where `<source_name>` matches a key in `config.json` (e.g. `USGS_Earthquake`, `Smithsonian_GVP`).
 
 Only enabled sources are accepted as valid arguments. The application will:
 
@@ -166,27 +166,26 @@ File data/USGS_Earthquake/earthquakes_2026-09-14.csv saved. Records: 142.
 Done.
 ```
 
-**Volcano alert data:**
+**Volcano data (Smithsonian GVP):**
 
 ```bash
-python run_download.py USGS_Volcano_Alerts
+python run_download.py Smithsonian_GVP
 ```
 
 ```
----- USGS_Volcano_Alerts Downloader ----
+---- Smithsonian_GVP Downloader ----
 
-Source name: USGS_Volcano_Alerts
-Source type: usgs_volcano_alerts
-API URL: https://volcanoes.usgs.gov/hans-public/api/notice/getRecentNotices
-Output folder: data/USGS_Volcano_Alerts
-Output file pattern: volcano_alerts_{date}.csv
-Load type: HISTORICAL
-Start date: 2026-09-01 00:00:00
-End date: 2026-09-14 00:00:00
+Source name: Smithsonian_GVP
+Source type: smithsonian_gvp
+API URL: https://volcview.wr.usgs.gov/vv-api/volcanoApi/wwvolcanoes
+Output folder: data/Smithsonian_GVP
+Output file pattern: volcanoes_{date}.csv
+Load type: INCREMENTAL
+Start date: 2026-09-14 00:00:00
+End date: 2026-09-13 00:00:00
 
-Downloading data for 2026-09-01.
-File data/USGS_Volcano_Alerts/volcano_alerts_2026-09-01.csv saved. Records: 6.
-...
+Download data for 2026-09-14.
+File data/Smithsonian_GVP/volcanoes_2026-09-14.csv saved. Records: 1566.
 
 Done.
 ```
@@ -200,10 +199,10 @@ Downloaded files are saved as CSV with one file per day, named by date.
 - **Location:** `data/USGS_Earthquake/earthquakes_YYYY-MM-DD.csv`
 - **Columns:** 23 fields including `time`, `latitude`, `longitude`, `depth`, `mag`, `magType`, `place`, `type`, `status`, and more.
 
-### USGS Volcano Alerts
+### Smithsonian GVP (Worldwide Volcanoes)
 
-- **Location:** `data/USGS_Volcano_Alerts/volcano_alerts_YYYY-MM-DD.csv`
-- **Columns:** 22 fields including `country_code`, `volcano_code`, `volcano_name`, `latitude`, `longitude`, `region`, `alert_level`, `color_code`, `notice_summary`, and more.
+- **Location:** `data/Smithsonian_GVP/volcanoes_YYYY-MM-DD.csv`
+- **Columns:** 9 fields including `vnum`, `volcano_name`, `latitude`, `longitude`, `elevation_meters`, `observatory_code`, `country_code`, `country_name`.
 
 ## Testing
 
@@ -217,7 +216,7 @@ Tests cover:
 - **Factory pattern** — registration, creation, overwrite, error cases.
 - **Utilities** — `date_range()` generator, `get_recent_file_date()` file scanning.
 - **Earthquake downloader** — mocked HTTP for success, empty, HTTP error, connection error, URL construction.
-- **Volcano downloader** — volcano cache loading, name-to-code resolution, date parsing, record building, download with notice sections, fallback to name matching, no-data handling.
+- **Volcano downloader** — country cache loading/saving, geocoding API calls, cache hit/miss, enrichment of volcanos with country codes, download from volcview API, no-data handling.
 
 ## Dataflow
 
@@ -235,13 +234,13 @@ flowchart TD
     I --> J[DownloaderFactory.create]
     J --> K{Source type?}
     K -->|usgs_earthquake| L[USGSEarthquakeDownloader]
-    K -->|usgs_volcano_alerts| M[USGSVolcanoDownloader]
+    K -->|smithsonian_gvp| M[SmithsonianGVPDownloader]
     L -->|HTTP GET with retry| N[USGS FDSN API]
-    M -->|HTTP GET with retry| O[USGS HANS API]
+    M -->|HTTP GET with retry| O[volcview API + BigDataCloud geocoding]
     N -->|CSV response| P[Parse CSV to list of dicts]
-    O -->|JSON response + cache| Q[Build enriched records]
-    P -->|per day| R[Save to data/USGS_Earthquake/]
-    Q -->|per day| S[Save to data/USGS_Volcano_Alerts/]
+    O -->|JSON response + country cache| Q[Build enriched records]
+    P -->|per day| R[Save to USGS_Earthquake]
+    Q -->|per day| S[Save to Smithsonian_GVP]
     H -->|logging| T[logs/SourceName/download_*.log]
 ```
 
