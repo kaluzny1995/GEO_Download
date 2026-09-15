@@ -6,7 +6,7 @@ class SourceConfig(BaseModel):
     type: str
     enabled: bool
     api_url: str
-    feed_url: str
+    feed_url: str = ""
     start_date: str
     output_folder: str
     output_file_pattern: str

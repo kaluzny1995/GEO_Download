@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from usgs.downloader import USGSDownloader
+from downloader.usgs_earthquake import USGSEarthquakeDownloader
 
 
 class MockLogger:
@@ -14,11 +14,14 @@ class MockLogger:
     def error(self, msg):
         self.messages.append(("ERROR", msg))
 
+    def warning(self, msg):
+        self.messages.append(("WARNING", msg))
+
 
 def test_download_csv_success():
     # Arrange
     logger = MockLogger()
-    downloader = USGSDownloader(logger=logger)
+    downloader = USGSEarthquakeDownloader(logger=logger)
 
     mock_response = MagicMock()
     mock_response.text = "time,latitude,longitude\n2026-09-01,40.0,-100.0\n2026-09-01,35.0,-90.0"
@@ -26,7 +29,7 @@ def test_download_csv_success():
 
     with patch.object(downloader.session, "get", return_value=mock_response):
         # Act
-        result = downloader.download_csv("https://example.com/api?format=csv")
+        result = downloader._download_csv("https://example.com/api?format=csv")
 
     # Assert
     assert len(result) == 2
@@ -39,7 +42,7 @@ def test_download_csv_success():
 def test_download_csv_empty_response():
     # Arrange
     logger = MockLogger()
-    downloader = USGSDownloader(logger=logger)
+    downloader = USGSEarthquakeDownloader(logger=logger)
 
     mock_response = MagicMock()
     mock_response.text = ""
@@ -47,7 +50,7 @@ def test_download_csv_empty_response():
 
     with patch.object(downloader.session, "get", return_value=mock_response):
         # Act
-        result = downloader.download_csv("https://example.com/api?format=csv")
+        result = downloader._download_csv("https://example.com/api?format=csv")
 
     # Assert
     assert result == []
@@ -56,7 +59,7 @@ def test_download_csv_empty_response():
 def test_download_csv_http_error():
     # Arrange
     logger = MockLogger()
-    downloader = USGSDownloader(logger=logger)
+    downloader = USGSEarthquakeDownloader(logger=logger)
 
     mock_response = MagicMock()
     mock_response.status_code = 500
@@ -64,7 +67,7 @@ def test_download_csv_http_error():
 
     with patch.object(downloader.session, "get", return_value=mock_response):
         # Act
-        result = downloader.download_csv("https://example.com/api?format=csv")
+        result = downloader._download_csv("https://example.com/api?format=csv")
 
     # Assert
     assert result == []
@@ -74,11 +77,11 @@ def test_download_csv_http_error():
 def test_download_csv_connection_error():
     # Arrange
     logger = MockLogger()
-    downloader = USGSDownloader(logger=logger)
+    downloader = USGSEarthquakeDownloader(logger=logger)
 
     with patch.object(downloader.session, "get", side_effect=Exception("Connection refused")):
         # Act
-        result = downloader.download_csv("https://example.com/api?format=csv")
+        result = downloader._download_csv("https://example.com/api?format=csv")
 
     # Assert
     assert result == []
@@ -88,7 +91,7 @@ def test_download_csv_connection_error():
 def test_download_by_date_range():
     # Arrange
     logger = MockLogger()
-    downloader = USGSDownloader(logger=logger)
+    downloader = USGSEarthquakeDownloader(logger=logger)
 
     mock_response = MagicMock()
     mock_response.text = "time,latitude\n2026-09-01,40.0"
@@ -113,7 +116,7 @@ def test_download_by_date_range():
 def test_download_csv_only_csv_records():
     # Arrange
     logger = MockLogger()
-    downloader = USGSDownloader(logger=logger)
+    downloader = USGSEarthquakeDownloader(logger=logger)
 
     mock_response = MagicMock()
     mock_response.text = "time,mag,place\n2026-09-01,2.5,Near"
@@ -121,7 +124,7 @@ def test_download_csv_only_csv_records():
 
     with patch.object(downloader.session, "get", return_value=mock_response):
         # Act
-        result = downloader.download_csv("https://example.com/api?format=csv")
+        result = downloader._download_csv("https://example.com/api?format=csv")
 
     # Assert
     assert len(result) == 1

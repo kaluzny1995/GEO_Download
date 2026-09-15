@@ -7,7 +7,7 @@ import datetime as dt
 import util
 from model import AppConfig, SourceConfig, LoadParams
 from downloader_factory import get_downloader
-import usgs  # noqa: F401 - triggers downloader registration
+import downloader  # noqa: F401 - triggers downloader registrations
 
 
 def parse_args(config: AppConfig) -> argparse.Namespace:

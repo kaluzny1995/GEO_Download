@@ -9,6 +9,15 @@
       "output_folder": "data/USGS_Earthquake",
       "output_file_pattern": "earthquakes_{date}.csv",
       "is_date_to_previous_day": true
+    },
+    "USGS_Volcano_Alerts": {
+      "type": "usgs_volcano_alerts",
+      "enabled": true,
+      "api_url": "https://volcanoes.usgs.gov/hans-public/api/notice/getRecentNotices",
+      "start_date": "2026-09-01",
+      "output_folder": "data/USGS_Volcano_Alerts",
+      "output_file_pattern": "volcano_alerts_{date}.csv",
+      "is_date_to_previous_day": true
     }
   }
 }

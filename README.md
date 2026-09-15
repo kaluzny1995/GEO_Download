@@ -4,21 +4,29 @@ GIS Data Downloader — a Python 3.11 application for programmatically downloadi
 
 ## Overview
 
-GEO_Download fetches earthquake data from the [USGS Earthquake Hazards Program](https://earthquake.usgs.gov/) FDSN Event Query API and saves it locally as dated CSV files. It supports two loading modes:
+GEO_Download fetches data from public geospatial APIs and saves it locally as dated CSV files. Currently supported sources:
+
+| Source | API | Data |
+|--------|-----|------|
+| USGS Earthquake | [FDSN Event Query](https://earthquake.usgs.gov/fdsnws/event/1/query) | Seismic events (lat/lon, depth, magnitude, place) |
+| USGS Volcano Alerts | [HANS API](https://volcanoes.usgs.gov/hans-public/api/) | Volcano notices (alert level, color code, country code, lat/lon) |
+
+Both sources support two loading modes:
 
 - **Historical** — bulk download from a configured start date to yesterday (initial load).
 - **Incremental** — download only the days missing since the last downloaded file (catch-up runs).
 
-The architecture is extensible: new data sources can be added by registering a downloader class with the factory, without modifying the core orchestration logic.
+The architecture is extensible: new data sources can be added by implementing a downloader class that inherits from `BaseDownloader`, without modifying the core orchestration logic.
 
 ## Features
 
 - **Automated date management** — automatically determines historical vs incremental mode by scanning the output folder for existing files.
 - **Day-by-day download** — each day's data is saved as a separate CSV, making files easy to manage and inspect.
 - **Retry with backoff** — HTTP requests use exponential backoff (5 retries) with automatic retry on 429 and 5xx status codes.
-- **Factory/Registry pattern** — new data sources are added via self-registering downloader packages.
+- **Abstract base class** — `BaseDownloader` provides shared session setup, JSON fetching, and CSV parsing; new sources only implement `download_by_date_range()`.
+- **Factory/Registry pattern** — new data sources are added via self-registering downloader classes.
 - **Frozen Pydantic models** — all configuration and parameter objects are immutable.
-- **Structured logging** — each run produces a timestamped log file under `logs/`.
+- **Structured logging** — each run produces a timestamped log file under `logs/<SourceName>/`.
 - **CLI interface** — source selection via command-line arguments.
 
 ## Tech Stack
@@ -47,20 +55,26 @@ GEO_Download/
 │   ├── source_config.py       # SourceConfig — per-source settings
 │   ├── download_params.py     # DownloadParams — download parameters
 │   ├── load_params.py         # LoadParams — determines load type and date range
-│   ├── e_source_type.py       # ESourceType enum (e.g. usgs_earthquake)
+│   ├── e_source_type.py       # ESourceType enum (usgs_earthquake, usgs_volcano_alerts)
 │   └── e_load_type.py         # ELoadType enum (HISTORICAL / INCREMENTAL)
-├── usgs/                      # USGS earthquake data downloader
-│   ├── __init__.py            # Registers USGSDownloader with the factory
-│   └── downloader.py          # USGSDownloader — HTTP download + CSV parsing
+├── downloader/                # Downloader classes (base + concrete implementations)
+│   ├── __init__.py            # Imports + factory registrations
+│   ├── base.py                # BaseDownloader — abstract base class
+│   ├── usgs_earthquake.py     # USGSEarthquakeDownloader
+│   └── usgs_volcano.py        # USGSVolcanoDownloader
 ├── test/                      # Unit tests
+│   ├── test_base_downloader.py
 │   ├── test_models.py
 │   ├── test_downloader_factory.py
 │   ├── test_util.py
-│   └── test_usgs_downloader.py
+│   ├── test_usgs_downloader.py
+│   └── test_usgs_volcano_downloader.py
 ├── data/                      # Downloaded CSV files (per source subfolder)
-│   └── USGS_Earthquake/
+│   ├── USGS_Earthquake/
+│   └── USGS_Volcano_Alerts/
 └── logs/                      # Timestamped log files (per source subfolder)
-    └── USGS_Earthquake/
+    ├── USGS_Earthquake/
+    └── USGS_Volcano_Alerts/
 ```
 
 ## Configuration
@@ -74,10 +88,18 @@ The application is configured via `config.json`. Each data source is defined und
       "type": "usgs_earthquake",
       "enabled": true,
       "api_url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
-      "feed_url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.csv",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_Earthquake",
       "output_file_pattern": "earthquakes_{date}.csv",
+      "is_date_to_previous_day": true
+    },
+    "USGS_Volcano_Alerts": {
+      "type": "usgs_volcano_alerts",
+      "enabled": true,
+      "api_url": "https://volcanoes.usgs.gov/hans-public/api/notice/getRecentNotices",
+      "start_date": "2026-09-01",
+      "output_folder": "data/USGS_Volcano_Alerts",
+      "output_file_pattern": "volcano_alerts_{date}.csv",
       "is_date_to_previous_day": true
     }
   }
@@ -89,7 +111,6 @@ The application is configured via `config.json`. Each data source is defined und
 | `type`                   | Source type identifier — maps to a registered downloader via `ESourceType` enum. |
 | `enabled`                | Whether this source is active and available for download.               |
 | `api_url`                | Base API URL used by the downloader to construct query requests.        |
-| `feed_url`               | Alternate feed URL (currently unused by the USGS downloader).           |
 | `start_date`             | Earliest date to download from (used in historical mode).               |
 | `output_folder`          | Directory where CSV files are saved.                                    |
 | `output_file_pattern`    | Filename pattern — `{date}` is replaced with `YYYY-MM-DD`.              |
@@ -110,7 +131,7 @@ conda activate geo_download_311
 python run_download.py <source_name>
 ```
 
-Where `<source_name>` matches a key in `config.json` (e.g. `USGS_Earthquake`).
+Where `<source_name>` matches a key in `config.json` (e.g. `USGS_Earthquake`, `USGS_Volcano_Alerts`).
 
 Only enabled sources are accepted as valid arguments. The application will:
 
@@ -119,13 +140,13 @@ Only enabled sources are accepted as valid arguments. The application will:
 3. Download data for each day in the date range.
 4. Save each day's data to a separate CSV file.
 
-### Example
+### Examples
+
+**Earthquake data:**
 
 ```bash
 python run_download.py USGS_Earthquake
 ```
-
-Output:
 
 ```
 ---- USGS_Earthquake Downloader ----
@@ -134,7 +155,7 @@ Source name: USGS_Earthquake
 Source type: usgs_earthquake
 API URL: https://earthquake.usgs.gov/fdsnws/event/1/query
 Output folder: data/USGS_Earthquake
-Output file_pattern: earthquakes_{date}.csv
+Output file pattern: earthquakes_{date}.csv
 Load type: INCREMENTAL
 Start date: 2026-09-14 00:00:00
 End date: 2026-09-13 00:00:00
@@ -145,15 +166,44 @@ File data/USGS_Earthquake/earthquakes_2026-09-14.csv saved. Records: 142.
 Done.
 ```
 
+**Volcano alert data:**
+
+```bash
+python run_download.py USGS_Volcano_Alerts
+```
+
+```
+---- USGS_Volcano_Alerts Downloader ----
+
+Source name: USGS_Volcano_Alerts
+Source type: usgs_volcano_alerts
+API URL: https://volcanoes.usgs.gov/hans-public/api/notice/getRecentNotices
+Output folder: data/USGS_Volcano_Alerts
+Output file pattern: volcano_alerts_{date}.csv
+Load type: HISTORICAL
+Start date: 2026-09-01 00:00:00
+End date: 2026-09-14 00:00:00
+
+Downloading data for 2026-09-01.
+File data/USGS_Volcano_Alerts/volcano_alerts_2026-09-01.csv saved. Records: 6.
+...
+
+Done.
+```
+
 ## Data Output
 
-Downloaded files are saved as CSV with the following structure:
+Downloaded files are saved as CSV with one file per day, named by date.
 
-- **Location:** `data/<SourceName>/earthquakes_YYYY-MM-DD.csv`
-- **Format:** One file per day, named by date.
-- **Columns:** 23 fields per record, including `time`, `latitude`, `longitude`, `depth`, `mag`, `magType`, `place`, `type`, `status`, and more.
+### USGS Earthquake
 
-Each CSV contains the USGS earthquake event data for that specific day.
+- **Location:** `data/USGS_Earthquake/earthquakes_YYYY-MM-DD.csv`
+- **Columns:** 23 fields including `time`, `latitude`, `longitude`, `depth`, `mag`, `magType`, `place`, `type`, `status`, and more.
+
+### USGS Volcano Alerts
+
+- **Location:** `data/USGS_Volcano_Alerts/volcano_alerts_YYYY-MM-DD.csv`
+- **Columns:** 22 fields including `country_code`, `volcano_code`, `volcano_name`, `latitude`, `longitude`, `region`, `alert_level`, `color_code`, `notice_summary`, and more.
 
 ## Testing
 
@@ -162,10 +212,12 @@ pytest test/
 ```
 
 Tests cover:
+- **Base downloader** — ABC instantiation guard, session creation with retry, `_get_json()` success/error.
 - **Model validation** — `SourceConfig`, `AppConfig`, `LoadParams` (historical vs incremental logic, `is_date_to_previous_day` flag).
 - **Factory pattern** — registration, creation, overwrite, error cases.
 - **Utilities** — `date_range()` generator, `get_recent_file_date()` file scanning.
-- **USGS Downloader** — mocked HTTP responses for success, empty, HTTP error, connection error, and URL construction.
+- **Earthquake downloader** — mocked HTTP for success, empty, HTTP error, connection error, URL construction.
+- **Volcano downloader** — volcano cache loading, name-to-code resolution, date parsing, record building, download with notice sections, fallback to name matching, no-data handling.
 
 ## Dataflow
 
@@ -181,11 +233,16 @@ flowchart TD
     G --> H
     H -->|day-by-day loop| I[date_range generator]
     I --> J[DownloaderFactory.create]
-    J --> K[USGSDownloader]
-    K -->|HTTP GET with retry| L[USGS FDSN API]
-    L -->|CSV response| M[Parse CSV to list of dicts]
-    M -->|per day| N[Save to data/USGS_Earthquake/earthquakes_YYYY-MM-DD.csv]
-    H -->|logging| O[logs/USGS_Earthquake/download_*.log]
+    J --> K{Source type?}
+    K -->|usgs_earthquake| L[USGSEarthquakeDownloader]
+    K -->|usgs_volcano_alerts| M[USGSVolcanoDownloader]
+    L -->|HTTP GET with retry| N[USGS FDSN API]
+    M -->|HTTP GET with retry| O[USGS HANS API]
+    N -->|CSV response| P[Parse CSV to list of dicts]
+    O -->|JSON response + cache| Q[Build enriched records]
+    P -->|per day| R[Save to data/USGS_Earthquake/]
+    Q -->|per day| S[Save to data/USGS_Volcano_Alerts/]
+    H -->|logging| T[logs/SourceName/download_*.log]
 ```
 
 ## Extensibility
@@ -193,7 +250,8 @@ flowchart TD
 To add a new data source:
 
 1. **Add a value to `ESourceType`** in `model/e_source_type.py`.
-2. **Create a new downloader package** (e.g. `new_source/`) with a class implementing `download_by_date_range()`.
-3. **Register the downloader** in the package's `__init__.py` via `DownloaderFactory.register()`.
-4. **Import the package** in `run_download.py` to trigger registration.
-5. **Add a source entry** to `config.json` with the new type.
+2. **Create a downloader class** in `downloader/` (e.g. `downloader/new_source.py`) inheriting from `BaseDownloader` and implementing `download_by_date_range()`.
+3. **Register the downloader** in `downloader/__init__.py` via `DownloaderFactory.register()`.
+4. **Add a source entry** to `config.json` with the new type.
+
+The base class provides shared infrastructure (session with retry, `_get_json()`, `_download_csv()`), so new sources only need to implement the date-range download logic.
