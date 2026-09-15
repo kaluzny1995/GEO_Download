@@ -10,13 +10,13 @@
       "output_file_pattern": "earthquakes_{date}.csv",
       "is_date_to_previous_day": true
     },
-    "Smithsonian_GVP": {
-      "type": "smithsonian_gvp",
+    "GDACS": {
+      "type": "gdacs",
       "enabled": true,
-      "api_url": "https://volcview.wr.usgs.gov/vv-api/volcanoApi/wwvolcanoes",
+      "api_url": "https://www.gdacs.org/gdacsapi/api/Events/geteventlist/SEARCH",
       "start_date": "2026-09-01",
-      "output_folder": "data/Smithsonian_GVP",
-      "output_file_pattern": "volcanoes_{date}.csv",
+      "output_folder": "data/GDACS",
+      "output_file_pattern": "disasters_{date}.csv",
       "is_date_to_previous_day": true
     }
   }

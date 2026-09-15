@@ -9,7 +9,7 @@ GEO_Download fetches data from public geospatial APIs and saves it locally as da
 | Source | API | Data |
 |--------|-----|------|
 | USGS Earthquake | [FDSN Event Query](https://earthquake.usgs.gov/fdsnws/event/1/query) | Seismic events (lat/lon, depth, magnitude, place) |
-| Smithsonian GVP | [volcview API](https://volcview.wr.usgs.gov) + [BigDataCloud](https://www.bigdatacloud.com) | Worldwide volcanoes (vnum, lat/lon, elevation, observatory, country code/name) |
+| GDACS | [GDACS REST API](https://www.gdacs.org/gdacsapi/swagger/index.html) | Global disasters — earthquakes, cyclones, floods, volcanoes, wildfires, droughts (country, alert level, severity) |
 
 Both sources support two loading modes:
 
@@ -55,26 +55,26 @@ GEO_Download/
 │   ├── source_config.py       # SourceConfig — per-source settings
 │   ├── download_params.py     # DownloadParams — download parameters
 │   ├── load_params.py         # LoadParams — determines load type and date range
-│   ├── e_source_type.py       # ESourceType enum (usgs_earthquake, smithsonian_gvp)
+│   ├── e_source_type.py       # ESourceType enum (usgs_earthquake, gdacs)
 │   └── e_load_type.py         # ELoadType enum (HISTORICAL / INCREMENTAL)
 ├── downloader/                # Downloader classes (base + concrete implementations)
 │   ├── __init__.py            # Imports + factory registrations
 │   ├── base.py                # BaseDownloader — abstract base class
 │   ├── usgs_earthquake.py     # USGSEarthquakeDownloader
-│   └── smithsonian_gvp.py     # SmithsonianGVPDownloader
+│   └── gdacs.py               # GDACSDownloader
 ├── test/                      # Unit tests
 │   ├── test_base_downloader.py
 │   ├── test_models.py
 │   ├── test_downloader_factory.py
 │   ├── test_util.py
 │   ├── test_usgs_downloader.py
-│   └── test_smithsonian_gvp_downloader.py
+│   └── test_gdacs_downloader.py
 ├── data/                      # Downloaded CSV files (per source subfolder)
 │   ├── USGS_Earthquake/
-│   └── Smithsonian_GVP/
+│   └── GDACS/
 └── logs/                      # Timestamped log files (per source subfolder)
     ├── USGS_Earthquake/
-    └── Smithsonian_GVP/
+    └── GDACS/
 ```
 
 ## Configuration
@@ -93,13 +93,13 @@ The application is configured via `config.json`. Each data source is defined und
       "output_file_pattern": "earthquakes_{date}.csv",
       "is_date_to_previous_day": true
     },
-    "Smithsonian_GVP": {
-      "type": "smithsonian_gvp",
+    "GDACS": {
+      "type": "gdacs",
       "enabled": true,
-      "api_url": "https://volcview.wr.usgs.gov/vv-api/volcanoApi/wwvolcanoes",
+      "api_url": "https://www.gdacs.org/gdacsapi/api/Events/geteventlist/SEARCH",
       "start_date": "2026-09-01",
-      "output_folder": "data/Smithsonian_GVP",
-      "output_file_pattern": "volcanoes_{date}.csv",
+      "output_folder": "data/GDACS",
+      "output_file_pattern": "disasters_{date}.csv",
       "is_date_to_previous_day": true
     }
   }
@@ -131,7 +131,7 @@ conda activate geo_download_311
 python run_download.py <source_name>
 ```
 
-Where `<source_name>` matches a key in `config.json` (e.g. `USGS_Earthquake`, `Smithsonian_GVP`).
+Where `<source_name>` matches a key in `config.json` (e.g. `USGS_Earthquake`, `GDACS`).
 
 Only enabled sources are accepted as valid arguments. The application will:
 
@@ -166,26 +166,29 @@ File data/USGS_Earthquake/earthquakes_2026-09-14.csv saved. Records: 142.
 Done.
 ```
 
-**Volcano data (Smithsonian GVP):**
+**Global disaster data (GDACS):**
 
 ```bash
-python run_download.py Smithsonian_GVP
+python run_download.py GDACS
 ```
 
 ```
----- Smithsonian_GVP Downloader ----
+---- GDACS Downloader ----
 
-Source name: Smithsonian_GVP
-Source type: smithsonian_gvp
-API URL: https://volcview.wr.usgs.gov/vv-api/volcanoApi/wwvolcanoes
-Output folder: data/Smithsonian_GVP
-Output file pattern: volcanoes_{date}.csv
-Load type: INCREMENTAL
-Start date: 2026-09-14 00:00:00
-End date: 2026-09-13 00:00:00
+Source name: GDACS
+Source type: gdacs
+API URL: https://www.gdacs.org/gdacsapi/api/Events/geteventlist/SEARCH
+Output folder: data/GDACS
+Output file pattern: disasters_{date}.csv
+Load type: HISTORICAL
+Start date: 2026-09-01 00:00:00
+End date: 2026-09-14 00:00:00
 
-Download data for 2026-09-14.
-File data/Smithsonian_GVP/volcanoes_2026-09-14.csv saved. Records: 1566.
+Downloading GDACS events for 2026-09-01 to 2026-09-01.
+  Page 1: 100 events
+  Page 2: 47 events
+Downloaded 147 GDACS events total
+File data/GDACS/disasters_2026-09-01.csv saved. Records: 147.
 
 Done.
 ```
@@ -199,10 +202,11 @@ Downloaded files are saved as CSV with one file per day, named by date.
 - **Location:** `data/USGS_Earthquake/earthquakes_YYYY-MM-DD.csv`
 - **Columns:** 23 fields including `time`, `latitude`, `longitude`, `depth`, `mag`, `magType`, `place`, `type`, `status`, and more.
 
-### Smithsonian GVP (Worldwide Volcanoes)
+### GDACS (Global Disasters)
 
-- **Location:** `data/Smithsonian_GVP/volcanoes_YYYY-MM-DD.csv`
-- **Columns:** 9 fields including `vnum`, `volcano_name`, `latitude`, `longitude`, `elevation_meters`, `observatory_code`, `country_code`, `country_name`.
+- **Location:** `data/GDACS/disasters_YYYY-MM-DD.csv`
+- **Columns:** 17 fields — `event_type`, `event_id`, `event_name`, `alert_level`, `country`, `country_code`, `latitude`, `longitude`, `from_date`, `to_date`, `date_modified`, `severity`, `severity_text`, `severity_unit`, `source`, `report_url`, `is_current`.
+- **Event types:** EQ (earthquake), TC (tropical cyclone), FL (flood), VO (volcano), WF (wildfire), DR (drought).
 
 ## Testing
 
@@ -216,7 +220,7 @@ Tests cover:
 - **Factory pattern** — registration, creation, overwrite, error cases.
 - **Utilities** — `date_range()` generator, `get_recent_file_date()` file scanning.
 - **Earthquake downloader** — mocked HTTP for success, empty, HTTP error, connection error, URL construction.
-- **Volcano downloader** — country cache loading/saving, geocoding API calls, cache hit/miss, enrichment of volcanos with country codes, download from volcview API, no-data handling.
+- **GDACS downloader** — record building from GeoJSON, pagination, empty/no-data handling.
 
 ## Dataflow
 
@@ -234,13 +238,13 @@ flowchart TD
     I --> J[DownloaderFactory.create]
     J --> K{Source type?}
     K -->|usgs_earthquake| L[USGSEarthquakeDownloader]
-    K -->|smithsonian_gvp| M[SmithsonianGVPDownloader]
+    K -->|gdacs| M[GDACSDownloader]
     L -->|HTTP GET with retry| N[USGS FDSN API]
-    M -->|HTTP GET with retry| O[volcview API + BigDataCloud geocoding]
+    M -->|HTTP GET with pagination| O[GDACS REST API]
     N -->|CSV response| P[Parse CSV to list of dicts]
-    O -->|JSON response + country cache| Q[Build enriched records]
+    O -->|GeoJSON response| Q[Parse features to flat records]
     P -->|per day| R[Save to USGS_Earthquake]
-    Q -->|per day| S[Save to Smithsonian_GVP]
+    Q -->|per day| S[Save to GDACS]
     H -->|logging| T[logs/SourceName/download_*.log]
 ```
 
