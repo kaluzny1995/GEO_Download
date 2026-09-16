@@ -1,0 +1,205 @@
+import pytest
+import datetime as dt
+import json
+import os
+import tempfile
+from unittest.mock import patch, MagicMock
+
+from downloader.openmeteo_flood import OpenMeteoFloodDownloader
+
+
+class MockLogger:
+    def __init__(self):
+        self.messages = []
+
+    def info(self, msg):
+        self.messages.append(("INFO", msg))
+
+    def error(self, msg):
+        self.messages.append(("ERROR", msg))
+
+    def warning(self, msg):
+        self.messages.append(("WARNING", msg))
+
+
+SAMPLE_RIVERS = [
+    {"name": "Danube", "country": "Romania", "latitude": 44.42, "longitude": 28.63},
+    {"name": "Rhine", "country": "Netherlands", "latitude": 51.85, "longitude": 4.25},
+    {"name": "Nile", "country": "Egypt", "latitude": 30.05, "longitude": 31.23},
+]
+
+SAMPLE_API_RESPONSE = {
+    "latitude": 44.42,
+    "longitude": 28.63,
+    "daily": {
+        "time": ["2026-09-01", "2026-09-02", "2026-09-03"],
+        "river_discharge": [5500.0, 5620.0, 5780.0],
+    },
+}
+
+SAMPLE_API_RESPONSE_WITH_NULL = {
+    "latitude": 30.05,
+    "longitude": 31.23,
+    "daily": {
+        "time": ["2026-09-01", "2026-09-02"],
+        "river_discharge": [None, 2100.0],
+    },
+}
+
+SAMPLE_API_RESPONSE_EMPTY = {
+    "latitude": 0.0,
+    "longitude": 0.0,
+    "daily": {
+        "time": [],
+        "river_discharge": [],
+    },
+}
+
+
+def _create_downloader(rivers=None, logger=None):
+    if logger is None:
+        logger = MockLogger()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(rivers or SAMPLE_RIVERS, f)
+        temp_path = f.name
+    try:
+        return OpenMeteoFloodDownloader(logger=logger, rivers_file=temp_path)
+    finally:
+        os.unlink(temp_path)
+
+
+def test_load_rivers():
+    # Arrange & Act
+    downloader = _create_downloader()
+
+    # Assert
+    assert len(downloader._rivers) == 3
+    assert downloader._rivers[0]["name"] == "Danube"
+
+
+def test_build_records():
+    # Arrange
+    downloader = _create_downloader()
+
+    # Act
+    records = downloader._build_records(
+        SAMPLE_RIVERS[0],
+        SAMPLE_API_RESPONSE,
+        dt.datetime(2026, 9, 1),
+        dt.datetime(2026, 9, 3),
+    )
+
+    # Assert
+    assert len(records) == 3
+    assert records[0]["river_name"] == "Danube"
+    assert records[0]["country"] == "Romania"
+    assert records[0]["latitude"] == 44.42
+    assert records[0]["longitude"] == 28.63
+    assert records[0]["date"] == "2026-09-01"
+    assert records[0]["discharge_m3s"] == 5500.0
+    assert records[2]["date"] == "2026-09-03"
+    assert records[2]["discharge_m3s"] == 5780.0
+
+
+def test_build_records_skips_null():
+    # Arrange
+    downloader = _create_downloader()
+
+    # Act
+    records = downloader._build_records(
+        SAMPLE_RIVERS[2],
+        SAMPLE_API_RESPONSE_WITH_NULL,
+        dt.datetime(2026, 9, 1),
+        dt.datetime(2026, 9, 2),
+    )
+
+    # Assert
+    assert len(records) == 1
+    assert records[0]["date"] == "2026-09-02"
+    assert records[0]["discharge_m3s"] == 2100.0
+
+
+def test_build_records_empty():
+    # Arrange
+    downloader = _create_downloader()
+
+    # Act
+    records = downloader._build_records(
+        SAMPLE_RIVERS[0],
+        SAMPLE_API_RESPONSE_EMPTY,
+        dt.datetime(2026, 9, 1),
+        dt.datetime(2026, 9, 3),
+    )
+
+    # Assert
+    assert records == []
+
+
+def test_download_by_date_range():
+    # Arrange
+    logger = MockLogger()
+    downloader = _create_downloader(logger=logger)
+
+    responses = [SAMPLE_API_RESPONSE, SAMPLE_API_RESPONSE, SAMPLE_API_RESPONSE_WITH_NULL]
+    call_count = 0
+
+    def mock_get_json(url):
+        nonlocal call_count
+        result = responses[call_count] if call_count < len(responses) else None
+        call_count += 1
+        return result
+
+    with patch.object(OpenMeteoFloodDownloader, "_get_json", side_effect=mock_get_json):
+        # Act
+        result = downloader.download_by_date_range(
+            "https://ignored.com",
+            dt.datetime(2026, 9, 1),
+            dt.datetime(2026, 9, 1),
+        )
+
+    # Assert
+    assert len(result) == 7  # 3 + 3 + 1 (null skipped)
+    assert result[0]["river_name"] == "Danube"
+    assert result[3]["river_name"] == "Rhine"
+    assert result[6]["river_name"] == "Nile"
+    assert call_count == 3
+
+
+def test_download_by_date_range_all_null():
+    # Arrange
+    logger = MockLogger()
+    downloader = _create_downloader(logger=logger)
+
+    null_response = {
+        "latitude": 0.0,
+        "longitude": 0.0,
+        "daily": {"time": ["2026-09-01"], "river_discharge": [None]},
+    }
+
+    with patch.object(OpenMeteoFloodDownloader, "_get_json", return_value=null_response):
+        # Act
+        result = downloader.download_by_date_range(
+            "https://ignored.com",
+            dt.datetime(2026, 9, 1),
+            dt.datetime(2026, 9, 1),
+        )
+
+    # Assert
+    assert result == []
+
+
+def test_download_by_date_range_api_error():
+    # Arrange
+    logger = MockLogger()
+    downloader = _create_downloader(logger=logger)
+
+    with patch.object(OpenMeteoFloodDownloader, "_get_json", return_value=None):
+        # Act
+        result = downloader.download_by_date_range(
+            "https://ignored.com",
+            dt.datetime(2026, 9, 1),
+            dt.datetime(2026, 9, 1),
+        )
+
+    # Assert
+    assert result == []

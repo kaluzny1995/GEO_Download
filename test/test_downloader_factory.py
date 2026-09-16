@@ -101,3 +101,14 @@ def test_register_eonet():
 
     # Assert
     assert isinstance(downloader, MockDownloader)
+
+
+def test_register_openmeteo_flood():
+    # Arrange
+    DownloaderFactory.register(ESourceType.OPENMETEO_FLOOD, MockDownloader)
+
+    # Act
+    downloader = DownloaderFactory.create(ESourceType.OPENMETEO_FLOOD)
+
+    # Assert
+    assert isinstance(downloader, MockDownloader)

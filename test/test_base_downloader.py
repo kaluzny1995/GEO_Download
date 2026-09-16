@@ -6,6 +6,7 @@ from downloader.base import BaseDownloader
 from downloader.usgs_earthquake import USGSEarthquakeDownloader
 from downloader.gdacs import GDACSDownloader
 from downloader.eonet import EONETDownloader
+from downloader.openmeteo_flood import OpenMeteoFloodDownloader
 
 
 class MockLogger:
@@ -74,8 +75,10 @@ def test_logger_name():
     eq_downloader = USGSEarthquakeDownloader(logger=logger)
     gdacs_downloader = GDACSDownloader(logger=logger)
     eonet_downloader = EONETDownloader(logger=logger)
+    flood_downloader = OpenMeteoFloodDownloader(logger=logger)
 
     # Assert
     assert eq_downloader.logger is logger
     assert gdacs_downloader.logger is logger
     assert eonet_downloader.logger is logger
+    assert flood_downloader.logger is logger

@@ -27,6 +27,15 @@
       "output_folder": "data/EONET",
       "output_file_pattern": "events_{date}.csv",
       "is_date_to_previous_day": true
+    },
+    "OpenMeteo_Flood": {
+      "type": "openmeteo_flood",
+      "enabled": true,
+      "api_url": "https://flood-api.open-meteo.com/v1/flood",
+      "start_date": "2026-09-01",
+      "output_folder": "data/OpenMeteo_Flood",
+      "output_file_pattern": "discharge_{date}.csv",
+      "is_date_to_previous_day": true
     }
   }
 }
