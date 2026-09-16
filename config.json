@@ -36,6 +36,15 @@
       "output_folder": "data/OpenMeteo_Flood",
       "output_file_pattern": "discharge_{date}.csv",
       "is_date_to_previous_day": true
+    },
+    "USGS_NWIS": {
+      "type": "usgs_nwis",
+      "enabled": true,
+      "api_url": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items",
+      "start_date": "2026-09-01",
+      "output_folder": "data/USGS_NWIS",
+      "output_file_pattern": "streamflow_{date}.csv",
+      "is_date_to_previous_day": true
     }
   }
 }

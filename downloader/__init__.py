@@ -3,6 +3,7 @@ from downloader.usgs_earthquake import USGSEarthquakeDownloader
 from downloader.gdacs import GDACSDownloader
 from downloader.eonet import EONETDownloader
 from downloader.openmeteo_flood import OpenMeteoFloodDownloader
+from downloader.usgs_nwis import USGSNWISDownloader
 from downloader_factory import DownloaderFactory
 from model.e_source_type import ESourceType
 
@@ -11,6 +12,7 @@ DownloaderFactory.register(ESourceType.USGS_EARTHQUAKE, USGSEarthquakeDownloader
 DownloaderFactory.register(ESourceType.GDACS, GDACSDownloader)
 DownloaderFactory.register(ESourceType.EONET, EONETDownloader)
 DownloaderFactory.register(ESourceType.OPENMETEO_FLOOD, OpenMeteoFloodDownloader)
+DownloaderFactory.register(ESourceType.USGS_NWIS, USGSNWISDownloader)
 
 __all__ = [
     "BaseDownloader",
@@ -18,4 +20,5 @@ __all__ = [
     "GDACSDownloader",
     "EONETDownloader",
     "OpenMeteoFloodDownloader",
+    "USGSNWISDownloader",
 ]

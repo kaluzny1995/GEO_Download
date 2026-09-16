@@ -112,3 +112,14 @@ def test_register_openmeteo_flood():
 
     # Assert
     assert isinstance(downloader, MockDownloader)
+
+
+def test_register_usgs_nwis():
+    # Arrange
+    DownloaderFactory.register(ESourceType.USGS_NWIS, MockDownloader)
+
+    # Act
+    downloader = DownloaderFactory.create(ESourceType.USGS_NWIS)
+
+    # Assert
+    assert isinstance(downloader, MockDownloader)

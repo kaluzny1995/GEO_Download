@@ -6,3 +6,4 @@ class ESourceType(str, Enum):
     GDACS = "gdacs"
     EONET = "eonet"
     OPENMETEO_FLOOD = "openmeteo_flood"
+    USGS_NWIS = "usgs_nwis"
