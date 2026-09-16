@@ -5,6 +5,7 @@ import datetime as dt
 from downloader.base import BaseDownloader
 from downloader.usgs_earthquake import USGSEarthquakeDownloader
 from downloader.gdacs import GDACSDownloader
+from downloader.eonet import EONETDownloader
 
 
 class MockLogger:
@@ -72,7 +73,9 @@ def test_logger_name():
     logger = MockLogger()
     eq_downloader = USGSEarthquakeDownloader(logger=logger)
     gdacs_downloader = GDACSDownloader(logger=logger)
+    eonet_downloader = EONETDownloader(logger=logger)
 
     # Assert
     assert eq_downloader.logger is logger
     assert gdacs_downloader.logger is logger
+    assert eonet_downloader.logger is logger

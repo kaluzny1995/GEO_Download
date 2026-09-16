@@ -90,3 +90,14 @@ def test_register_gdacs():
 
     # Assert
     assert isinstance(downloader, MockDownloader)
+
+
+def test_register_eonet():
+    # Arrange
+    DownloaderFactory.register(ESourceType.EONET, MockDownloader)
+
+    # Act
+    downloader = DownloaderFactory.create(ESourceType.EONET)
+
+    # Assert
+    assert isinstance(downloader, MockDownloader)
