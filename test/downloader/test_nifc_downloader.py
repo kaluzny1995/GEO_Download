@@ -19,6 +19,9 @@ class MockLogger:
         self.messages.append(("WARNING", msg))
 
 
+TEST_BASE_URL = "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query"
+
+
 def test_build_record():
     logger = MockLogger()
     downloader = NIFCDownloader(logger=logger)
@@ -131,7 +134,7 @@ def test_download_by_date_range_success():
     end_date = dt.datetime(2026, 9, 2)
 
     with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range(downloader.WFIGS_PERIMETERS_URL, start_date, end_date)
+        result = downloader.download_by_date_range(TEST_BASE_URL, start_date, end_date)
 
     assert len(result) == 2
     assert result[0]["incident_name"] == "Fire1"
@@ -150,7 +153,7 @@ def test_download_by_date_range_empty_features():
     end_date = dt.datetime(2026, 9, 2)
 
     with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range(downloader.WFIGS_PERIMETERS_URL, start_date, end_date)
+        result = downloader.download_by_date_range(TEST_BASE_URL, start_date, end_date)
 
     assert len(result) == 0
 
@@ -167,7 +170,7 @@ def test_download_by_date_range_none_response():
     end_date = dt.datetime(2026, 9, 2)
 
     with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range(downloader.WFIGS_PERIMETERS_URL, start_date, end_date)
+        result = downloader.download_by_date_range(TEST_BASE_URL, start_date, end_date)
 
     assert len(result) == 0
     assert any("No data received" in msg for _, msg in logger.messages)
@@ -179,7 +182,7 @@ def test_download_by_date_range_connection_error():
 
     with patch.object(downloader.session, "get", side_effect=Exception("Connection refused")):
         result = downloader.download_by_date_range(
-            downloader.WFIGS_PERIMETERS_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2)
+            TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2)
         )
 
     assert result == []
@@ -198,7 +201,7 @@ def test_download_by_date_range_builds_correct_where_clause():
     end_date = dt.datetime(2026, 9, 17)
 
     with patch.object(downloader.session, "get", return_value=mock_response) as mock_get:
-        downloader.download_by_date_range(downloader.WFIGS_PERIMETERS_URL, start_date, end_date)
+        downloader.download_by_date_range(TEST_BASE_URL, start_date, end_date)
 
     called_url = mock_get.call_args[0][0]
     assert "poly_DateCurrent >= TIMESTAMP '2026-09-01 00:00:00'" in called_url

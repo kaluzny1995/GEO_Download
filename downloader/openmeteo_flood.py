@@ -13,13 +13,12 @@ class OpenMeteoFloodDownloader(BaseDownloader):
     defined in data/rivers.json.
     """
 
-    FLOOD_API_URL = "https://flood-api.open-meteo.com/v1/flood"
-    RIVERS_FILE = str(Path(__file__).resolve().parent.parent / "data" / "rivers.json")
+    DEFAULT_RIVERS_FILE = str(Path(__file__).resolve().parent.parent / "data" / "rivers.json")
 
     def __init__(self, timeout: int = 30, logger=None, log_folder: str | None = None,
                  rivers_file: str | None = None):
         super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
-        self._rivers_file = rivers_file or self.RIVERS_FILE
+        self._rivers_file = rivers_file or self.DEFAULT_RIVERS_FILE
         self._rivers = self._load_rivers()
 
     def _load_rivers(self) -> list[dict]:
@@ -27,15 +26,15 @@ class OpenMeteoFloodDownloader(BaseDownloader):
         with open(self._rivers_file, "r") as f:
             return json.load(f)
 
-    def _query_river(self, river: dict, start_date: dt.datetime, end_date: dt.datetime) -> dict | None:
+    def _query_river(self, base_url: str, river: dict, start_date: dt.datetime, end_date: dt.datetime) -> dict | None:
         """Query Open-Meteo Flood API for a single river."""
         url = (
-            f"{self.FLOOD_API_URL}"
+            f"{base_url}"
             f"?latitude={river['latitude']}"
             f"&longitude={river['longitude']}"
             f"&daily=river_discharge"
-            f"&start_date={start_date.strftime('%Y-%m-%d')}"
-            f"&end_date={end_date.strftime('%Y-%m-%d')}"
+            f"&start_date={self._format_date(start_date)}"
+            f"&end_date={self._format_date(end_date)}"
         )
         result = self._get_json(url)
         return result if isinstance(result, dict) else None
@@ -72,7 +71,7 @@ class OpenMeteoFloodDownloader(BaseDownloader):
         rivers_with_data = 0
 
         for i, river in enumerate(self._rivers, 1):
-            data = self._query_river(river, start_date, end_date)
+            data = self._query_river(base_url, river, start_date, end_date)
             if data and isinstance(data, dict):
                 records = self._build_records(river, data, start_date, end_date)
                 if records:

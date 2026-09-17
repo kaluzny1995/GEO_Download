@@ -11,8 +11,6 @@ class EONETDownloader(BaseDownloader):
     landslides, sea ice, temperature extremes, and more.
     """
 
-    EVENTS_URL = "https://eonet.gsfc.nasa.gov/api/v3/events"
-
     def _build_record(self, event: dict) -> dict:
         """Extract a flat record dict from an EONET event."""
         categories = event.get("categories", [])
@@ -75,13 +73,14 @@ class EONETDownloader(BaseDownloader):
         self.logger.info(f"Downloading EONET events for {start_date.date()} to {end_date.date()}")
 
         url = (
-            f"{self.EVENTS_URL}"
-            f"?start={start_date.strftime('%Y-%m-%d')}"
-            f"&end={end_date.strftime('%Y-%m-%d')}"
+            f"{base_url}"
+            f"?start={self._format_date(start_date)}"
+            f"&end={self._format_date(end_date)}"
         )
 
         data = self._get_json(url)
-        if not data or not isinstance(data, dict):
+        data = self._validate_dict_response(data, "EONET")
+        if not data:
             return []
 
         events = data.get("events", [])

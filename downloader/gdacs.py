@@ -11,15 +11,13 @@ class GDACSDownloader(BaseDownloader):
     volcanoes (VO), wildfires (WF), and droughts (DR).
     """
 
-    __slots__ = ("_event_types",)
-
-    SEARCH_URL = "https://www.gdacs.org/gdacsapi/api/Events/geteventlist/SEARCH"
-    PAGE_SIZE = 100
+    __slots__ = ("_event_types", "_page_size")
 
     def __init__(self, timeout: int = 30, logger=None, log_folder: str | None = None,
-                 event_types: str = "EQ;TC;FL;VO;WF;DR"):
+                 event_types: str = "EQ;TC;FL;VO;WF;DR", page_size: int = 100):
         super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
         self._event_types = event_types
+        self._page_size = page_size
 
     def _build_record(self, feature: dict) -> dict:
         """Extract a flat record dict from a GeoJSON feature."""
@@ -48,21 +46,21 @@ class GDACSDownloader(BaseDownloader):
             "is_current": props.get("iscurrent", ""),
         }
 
-    def _fetch_page(self, start_date: dt.datetime, end_date: dt.datetime, page: int) -> list[dict]:
+    def _fetch_page(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime, page: int) -> list[dict]:
         """Fetch a single page of GDACS events."""
         params = (
             f"?eventlist={self._event_types}"
-            f"&fromdate={start_date.strftime('%Y-%m-%d')}"
-            f"&todate={end_date.strftime('%Y-%m-%d')}"
+            f"&fromdate={self._format_date(start_date)}"
+            f"&todate={self._format_date(end_date)}"
             f"&alertlevel=red;orange;green"
-            f"&pagesize={self.PAGE_SIZE}"
+            f"&pagesize={self._page_size}"
             f"&pagenumber={page}"
         )
-        url = f"{self.SEARCH_URL}{params}"
+        url = f"{base_url}{params}"
         data = self._get_json(url)
         if not data or not isinstance(data, dict):
             return []
-        return data.get("features", [])
+        return self._extract_features(data)
 
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Download disaster events from GDACS for the given date range.
@@ -75,7 +73,7 @@ class GDACSDownloader(BaseDownloader):
         page = 1
 
         while True:
-            features = self._fetch_page(start_date, end_date, page)
+            features = self._fetch_page(base_url, start_date, end_date, page)
             if not features:
                 break
 
@@ -85,7 +83,7 @@ class GDACSDownloader(BaseDownloader):
 
             self.logger.info(f"  Page {page}: {len(features)} events")
 
-            if len(features) < self.PAGE_SIZE:
+            if len(features) < self._page_size:
                 break
             page += 1
 

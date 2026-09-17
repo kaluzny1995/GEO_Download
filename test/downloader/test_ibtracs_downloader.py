@@ -29,11 +29,13 @@ SAMPLE_CSV = (
     "2026,WP,,2026-09-03 00:00:00,HU,16.0,136.0,80,970,500,0\n"
 )
 
+TEST_BASE_URL = "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv"
+
 
 def test_build_url():
     logger = MockLogger()
     downloader = IBTrACSDownloader(logger=logger)
-    url = downloader._build_url()
+    url = downloader._build_url(TEST_BASE_URL)
     assert "ibtracs.last3years.list.v04r01.csv" in url
     assert "ncei.noaa.gov" in url
 
@@ -41,7 +43,7 @@ def test_build_url():
 def test_build_url_custom_dataset():
     logger = MockLogger()
     downloader = IBTrACSDownloader(logger=logger, dataset="all")
-    url = downloader._build_url()
+    url = downloader._build_url(TEST_BASE_URL)
     assert "ibtracs.all.list.v04r01.csv" in url
 
 

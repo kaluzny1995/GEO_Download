@@ -19,6 +19,9 @@ class MockLogger:
         self.messages.append(("WARNING", msg))
 
 
+TEST_BASE_URL = "https://volcanoes.usgs.gov/hans-public/api/volcano"
+
+
 def test_build_record():
     logger = MockLogger()
     downloader = USGSVolcanoDownloader(logger=logger)
@@ -96,7 +99,7 @@ def test_download_by_date_range_success():
     end_date = dt.datetime(2026, 9, 17)
 
     with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range(downloader.ELEVATED_URL, start_date, end_date)
+        result = downloader.download_by_date_range(TEST_BASE_URL, start_date, end_date)
 
     assert len(result) == 2
     assert result[0]["volcano_name"] == "Great Sitkin"
@@ -124,7 +127,7 @@ def test_download_by_date_range_filters_by_date():
     end_date = dt.datetime(2026, 9, 12)
 
     with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range(downloader.ELEVATED_URL, start_date, end_date)
+        result = downloader.download_by_date_range(TEST_BASE_URL, start_date, end_date)
 
     assert len(result) == 1
     assert result[0]["volcano_name"] == "Volcano B"
@@ -142,7 +145,7 @@ def test_download_by_date_range_empty():
     end_date = dt.datetime(2026, 9, 17)
 
     with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range(downloader.ELEVATED_URL, start_date, end_date)
+        result = downloader.download_by_date_range(TEST_BASE_URL, start_date, end_date)
 
     assert len(result) == 0
     assert any("No data received" in msg for _, msg in logger.messages)
@@ -160,7 +163,7 @@ def test_download_by_date_range_none_response():
     end_date = dt.datetime(2026, 9, 17)
 
     with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range(downloader.ELEVATED_URL, start_date, end_date)
+        result = downloader.download_by_date_range(TEST_BASE_URL, start_date, end_date)
 
     assert len(result) == 0
 
@@ -170,7 +173,7 @@ def test_download_by_date_range_connection_error():
     downloader = USGSVolcanoDownloader(logger=logger)
 
     with patch.object(downloader.session, "get", side_effect=Exception("Connection refused")):
-        result = downloader.download_by_date_range(downloader.ELEVATED_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2))
+        result = downloader.download_by_date_range(TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2))
 
     assert result == []
     assert any("Failed to fetch" in msg for _, msg in logger.messages)

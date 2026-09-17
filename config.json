@@ -7,8 +7,9 @@
       "feed_url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.csv",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_Earthquake",
-      "output_file_pattern": "earthquakes_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "usgs_earthquakes_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {}
     },
     "GDACS": {
       "type": "gdacs",
@@ -16,8 +17,12 @@
       "api_url": "https://www.gdacs.org/gdacsapi/api/Events/geteventlist/SEARCH",
       "start_date": "2026-09-01",
       "output_folder": "data/GDACS",
-      "output_file_pattern": "disasters_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "gdacs_disasters_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {
+        "event_types": "EQ;TC;FL;VO;WF;DR",
+        "page_size": 100
+      }
     },
     "EONET": {
       "type": "eonet",
@@ -25,8 +30,9 @@
       "api_url": "https://eonet.gsfc.nasa.gov/api/v3/events",
       "start_date": "2026-09-01",
       "output_folder": "data/EONET",
-      "output_file_pattern": "events_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "eonet_events_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {}
     },
     "OpenMeteo_Flood": {
       "type": "openmeteo_flood",
@@ -34,17 +40,24 @@
       "api_url": "https://flood-api.open-meteo.com/v1/flood",
       "start_date": "2026-09-01",
       "output_folder": "data/OpenMeteo_Flood",
-      "output_file_pattern": "discharge_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "openmeteo_rivers_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {
+        "rivers_file": "data/rivers.json"
+      }
     },
     "USGS_NWIS": {
       "type": "usgs_nwis",
       "enabled": true,
-      "api_url": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items",
+      "api_url": "https://waterservices.usgs.gov/nwis/dv/",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_NWIS",
-      "output_file_pattern": "streamflow_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "usgs_streamflow_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {
+        "sites": "01646500",
+        "parameter_code": "00060"
+      }
     },
     "Avalanche_ORG": {
       "type": "avalanche_org",
@@ -52,8 +65,9 @@
       "api_url": "https://api.avalanche.org/v2/public/products/map-layer",
       "start_date": "2026-09-01",
       "output_folder": "data/Avalanche_ORG",
-      "output_file_pattern": "avalanche_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "avalancheorg_avalanche_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {}
     },
     "IBTrACS": {
       "type": "ibtracs",
@@ -61,8 +75,11 @@
       "api_url": "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv",
       "start_date": "2026-09-01",
       "output_folder": "data/IBTrACS",
-      "output_file_pattern": "cyclones_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "ibtracs_cyclones_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {
+        "dataset": "last3years"
+      }
     },
     "USGS_Volcano": {
       "type": "usgs_volcano",
@@ -70,8 +87,9 @@
       "api_url": "https://volcanoes.usgs.gov/hans-public/api/volcano",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_Volcano",
-      "output_file_pattern": "volcanoes_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "usgs_volcanoes_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {}
     },
     "NIFC": {
       "type": "nifc",
@@ -79,8 +97,9 @@
       "api_url": "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query",
       "start_date": "2026-09-01",
       "output_folder": "data/NIFC",
-      "output_file_pattern": "fires_{date}.csv",
-      "is_date_to_previous_day": true
+      "output_file_pattern": "nifc_fires_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {}
     }
   }
 }

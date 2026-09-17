@@ -11,8 +11,6 @@ class AvalancheOrgDownloader(BaseDownloader):
     Returns daily danger ratings (1-5 scale) with zone metadata.
     """
 
-    MAP_LAYER_URL = "https://api.avalanche.org/v2/public/products/map-layer"
-
     def _build_record(self, feature: dict) -> dict:
         """Extract a flat record dict from a GeoJSON feature."""
         props = feature.get("properties", {})
@@ -46,14 +44,14 @@ class AvalancheOrgDownloader(BaseDownloader):
 
         current = start_date
         while current <= end_date:
-            url = f"{self.MAP_LAYER_URL}?day={current.strftime('%Y-%m-%d')}"
+            url = f"{base_url}?day={self._format_date(current)}"
             data = self._get_json(url)
 
             if data and isinstance(data, dict) and data.get("type") == "FeatureCollection":
-                features = data.get("features", [])
+                features = self._extract_features(data)
                 for feature in features:
                     record = self._build_record(feature)
-                    record["date"] = current.strftime("%Y-%m-%d")
+                    record["date"] = self._format_date(current)
                     all_records.append(record)
 
                 self.logger.info(f"  {current.date()}: {len(features)} zones")

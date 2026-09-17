@@ -46,6 +46,34 @@ class BaseDownloader(abc.ABC):
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Download data for a specific date range. Returns list of record dicts."""
 
+    @staticmethod
+    def _format_date(date: dt.datetime) -> str:
+        """Format datetime as YYYY-MM-DD string."""
+        return date.strftime("%Y-%m-%d")
+
+    @staticmethod
+    def _format_datetime(date: dt.datetime) -> str:
+        """Format datetime as YYYY-MM-DD HH:MM:SS string."""
+        return date.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _validate_dict_response(self, data: dict | None, source_name: str) -> dict | None:
+        """Validate API response is a non-empty dict. Returns None if invalid."""
+        if not data or not isinstance(data, dict):
+            self.logger.warning(f"No data received from {source_name} API")
+            return None
+        return data
+
+    def _validate_list_response(self, data: list | None, source_name: str) -> list | None:
+        """Validate API response is a non-empty list. Returns None if invalid."""
+        if not data or not isinstance(data, list):
+            self.logger.warning(f"No data received from {source_name} API")
+            return None
+        return data
+
+    def _extract_features(self, data: dict, source_name: str = "") -> list[dict]:
+        """Extract features array from a dict response. Returns empty list if not found."""
+        return data.get("features", [])
+
     def _get_json(self, url: str) -> list | dict | None:
         """Fetch JSON from URL, return None on error."""
         self.logger.info(f"Fetching: {url}")
@@ -74,5 +102,35 @@ class BaseDownloader(abc.ABC):
 
         reader = csv.DictReader(io.StringIO(response.text))
         records = list(reader)
+        self.logger.info(f"Downloaded {len(records)} records")
+        return records
+
+    def _download_csv_with_filter(self, url: str, filter_func=None) -> list[dict]:
+        """Download CSV from URL with optional custom filter/parser.
+
+        Args:
+            url: URL to download from
+            filter_func: Optional callable that takes (text: str) -> list[dict]
+                         If provided, uses this instead of default DictReader parsing.
+        """
+        self.logger.info(f"Downloading CSV from: {url}")
+        response = None
+        try:
+            response = self.session.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            self.logger.info("Download successful")
+        except Exception as e:
+            if response is not None:
+                self.logger.error(f"Download failed: {response.status_code} - {e}")
+            else:
+                self.logger.error(f"Download failed: {e}")
+            return []
+
+        if filter_func:
+            records = filter_func(response.text)
+        else:
+            reader = csv.DictReader(io.StringIO(response.text))
+            records = list(reader)
+
         self.logger.info(f"Downloaded {len(records)} records")
         return records

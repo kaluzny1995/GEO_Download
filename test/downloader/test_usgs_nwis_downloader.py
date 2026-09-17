@@ -97,9 +97,11 @@ def test_build_record():
 def test_build_url():
     # Arrange
     downloader = _create_downloader()
+    base_url = "https://waterservices.usgs.gov/nwis/dv/"
 
     # Act
     url = downloader._build_url(
+        base_url,
         dt.datetime(2026, 9, 1),
         dt.datetime(2026, 9, 14),
     )

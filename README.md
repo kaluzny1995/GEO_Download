@@ -119,7 +119,7 @@ The application is configured via `config.json`. Each data source is defined und
       "api_url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_Earthquake",
-      "output_file_pattern": "earthquakes_{date}.csv",
+      "output_file_pattern": "usgs_earthquakes_{date}.csv",
       "is_date_to_previous_day": true
     },
     "GDACS": {
@@ -128,7 +128,7 @@ The application is configured via `config.json`. Each data source is defined und
       "api_url": "https://www.gdacs.org/gdacsapi/api/Events/geteventlist/SEARCH",
       "start_date": "2026-09-01",
       "output_folder": "data/GDACS",
-      "output_file_pattern": "disasters_{date}.csv",
+      "output_file_pattern": "gdacs_disasters_{date}.csv",
       "is_date_to_previous_day": true
     },
     "EONET": {
@@ -137,7 +137,7 @@ The application is configured via `config.json`. Each data source is defined und
       "api_url": "https://eonet.gsfc.nasa.gov/api/v3/events",
       "start_date": "2026-09-01",
       "output_folder": "data/EONET",
-      "output_file_pattern": "events_{date}.csv",
+      "output_file_pattern": "eonet_events_{date}.csv",
       "is_date_to_previous_day": true
     },
     "OpenMeteo_Flood": {
@@ -146,7 +146,7 @@ The application is configured via `config.json`. Each data source is defined und
       "api_url": "https://flood-api.open-meteo.com/v1/flood",
       "start_date": "2026-09-01",
       "output_folder": "data/OpenMeteo_Flood",
-      "output_file_pattern": "discharge_{date}.csv",
+      "output_file_pattern": "openmeteo_rivers_{date}.csv",
       "is_date_to_previous_day": true
     },
     "USGS_NWIS": {
@@ -155,7 +155,7 @@ The application is configured via `config.json`. Each data source is defined und
       "api_url": "https://waterservices.usgs.gov/nwis/dv/",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_NWIS",
-      "output_file_pattern": "streamflow_{date}.csv",
+      "output_file_pattern": "usgs_streamflow_{date}.csv",
       "is_date_to_previous_day": true
     },
     "IBTrACS": {
@@ -164,16 +164,16 @@ The application is configured via `config.json`. Each data source is defined und
       "api_url": "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv",
       "start_date": "2026-09-01",
       "output_folder": "data/IBTrACS",
-      "output_file_pattern": "cyclones_{date}.csv",
+      "output_file_pattern": "ibtracs_cyclones_{date}.csv",
       "is_date_to_previous_day": true
     },
     "USGS_Volcano": {
       "type": "usgs_volcano",
       "enabled": true,
-      "api_url": "https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes",
+      "api_url": "https://volcanoes.usgs.gov/hans-public/api/volcano",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_Volcano",
-      "output_file_pattern": "volcanoes_{date}.csv",
+      "output_file_pattern": "usgs_volcanoes_{date}.csv",
       "is_date_to_previous_day": true
     },
     "NIFC": {
@@ -182,7 +182,7 @@ The application is configured via `config.json`. Each data source is defined und
       "api_url": "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query",
       "start_date": "2026-09-01",
       "output_folder": "data/NIFC",
-      "output_file_pattern": "fires_{date}.csv",
+      "output_file_pattern": "nifc_fires_{date}.csv",
       "is_date_to_previous_day": true
     }
   }
@@ -198,6 +198,7 @@ The application is configured via `config.json`. Each data source is defined und
 | `output_folder`          | Directory where CSV files are saved.                                    |
 | `output_file_pattern`    | Filename pattern — `{date}` is replaced with `YYYY-MM-DD`.              |
 | `is_date_to_previous_day`| If `true`, the end date is yesterday; if `false`, it's today.           |
+| `params`                 | Additional source-specific parameters passed to the downloader constructor. |
 
 ## Usage
 
@@ -244,7 +245,7 @@ Start date: 2026-09-14 00:00:00
 End date: 2026-09-13 00:00:00
 
 Downloading data for 2026-09-14.
-File data/USGS_Earthquake/earthquakes_2026-09-14.csv saved. Records: 142.
+File data/USGS_Earthquake/usgs_earthquakes_2026-09-14.csv saved. Records: 142.
 
 Done.
 ```
@@ -305,7 +306,7 @@ Downloading GDACS events for 2026-09-01 to 2026-09-01.
   Page 1: 100 events
   Page 2: 47 events
 Downloaded 147 GDACS events total
-File data/GDACS/disasters_2026-09-01.csv saved. Records: 147.
+File data/GDACS/gdacs_disasters_2026-09-01.csv saved. Records: 147.
 
 Done.
 ```
@@ -316,38 +317,38 @@ Downloaded files are saved as CSV with one file per day, named by date.
 
 ### USGS Earthquake
 
-- **Location:** `data/USGS_Earthquake/earthquakes_YYYY-MM-DD.csv`
+- **Location:** `data/USGS_Earthquake/usgs_earthquakes_YYYY-MM-DD.csv`
 - **Columns:** 23 fields including `time`, `latitude`, `longitude`, `depth`, `mag`, `magType`, `place`, `type`, `status`, and more.
 
 ### GDACS (Global Disasters)
 
-- **Location:** `data/GDACS/disasters_YYYY-MM-DD.csv`
+- **Location:** `data/GDACS/gdacs_disasters_YYYY-MM-DD.csv`
 - **Columns:** 17 fields — `event_type`, `event_id`, `event_name`, `alert_level`, `country`, `country_code`, `latitude`, `longitude`, `from_date`, `to_date`, `date_modified`, `severity`, `severity_text`, `severity_unit`, `source`, `report_url`, `is_current`.
 - **Event types:** EQ (earthquake), TC (tropical cyclone), FL (flood), VO (volcano), WF (wildfire), DR (drought).
 
 ### NASA EONET (Natural Events)
 
-- **Location:** `data/EONET/events_YYYY-MM-DD.csv`
+- **Location:** `data/EONET/eonet_events_YYYY-MM-DD.csv`
 - **Columns:** 17 fields — `event_id`, `event_name`, `category_id`, `category_name`, `description`, `source_id`, `source_url`, `latitude`, `longitude`, `event_date`, `magnitude_value`, `magnitude_unit`, `closed`, `geometry_count`, `last_latitude`, `last_longitude`, `last_date`.
 - **Categories:** wildfires, severeStorms, floods, volcanoes, earthquakes, drought, landslides, seaLakeIce, snow, tempExtremes, dustHaze, manmade, waterColor.
 
 ### Open-Meteo Flood (River Discharge)
 
-- **Location:** `data/OpenMeteo_Flood/discharge_YYYY-MM-DD.csv`
+- **Location:** `data/OpenMeteo_Flood/openmeteo_rivers_YYYY-MM-DD.csv`
 - **Columns:** 6 fields — `river_name`, `country`, `latitude`, `longitude`, `date`, `discharge_m3s`.
 - **Coverage:** 126 major world rivers across all continents. Based on GloFAS v4 model (5km resolution).
 - **River list:** Defined in `data/rivers.json` — editable to add/remove monitoring locations.
 
 ### USGS NWIS (US Streamflow)
 
-- **Location:** `data/USGS_NWIS/streamflow_YYYY-MM-DD.csv`
+- **Location:** `data/USGS_NWIS/usgs_streamflow_YYYY-MM-DD.csv`
 - **Columns:** 9 fields — `site_id`, `site_name`, `parameter_code`, `date`, `value`, `unit`, `qualifiers`, `latitude`, `longitude`.
 - **Coverage:** USGS stream gauges across the United States. Configure via `sites` parameter in constructor (comma-separated site numbers).
 - **Default site:** USGS-01646500 (Potomac River near Washington DC).
 
 ### IBTrACS (Global Tropical Cyclones)
 
-- **Location:** `data/IBTrACS/cyclones_YYYY-MM-DD.csv`
+- **Location:** `data/IBTrACS/ibtracs_cyclones_YYYY-MM-DD.csv`
 - **Columns:** 11 fields — `SEASON`, `BASIN`, `SUBBASIN`, `ISO_TIME`, `NATURE`, `LAT`, `LON`, `WMO_WIND`, `WMO_PRES`, `DIST2LAND`, `LANDFALL`.
 - **Coverage:** Global tropical cyclone best-track data from all ocean basins (NA, EP, WP, NI, SI, SP). Data from 1842 to present, updated 3x/week.
 - **Wind speed:** Maximum sustained wind in knots (WMO_WIND). 35 kt = tropical storm, 64 kt = hurricane/cyclone/typhoon.
@@ -355,14 +356,14 @@ Downloaded files are saved as CSV with one file per day, named by date.
 
 ### USGS Volcano
 
-- **Location:** `data/USGS_Volcano/volcanoes_YYYY-MM-DD.csv`
+- **Location:** `data/USGS_Volcano/usgs_volcanoes_YYYY-MM-DD.csv`
 - **Columns:** 18 fields — `volcano_id`, `volcano_name`, `volcano_type`, `alert_level`, `notice_date`, `notice_summary`, `notice_link`, `observatory`, `state`, `country`, `latitude`, `longitude`, `elevation`, `eruption_status`, `last_eruption`, `is_monitored`, `monitoring_status`, `source_url`.
 - **Coverage:** US volcanoes with elevated alert status (ADVISORY, WATCH, WARNING). Data from USGS HANS Public API, filtered by alert status.
 - **Note:** Only includes volcanoes with elevated alerts; clear/normal status volcanoes are not included in daily downloads.
 
 ### NIFC (US Wildland Fires)
 
-- **Location:** `data/NIFC/fires_YYYY-MM-DD.csv`
+- **Location:** `data/NIFC/nifc_fires_YYYY-MM-DD.csv`
 - **Columns:** 16 fields — `incident_name`, `irwin_id`, `fire_number`, `acres`, `percent_contained`, `fire_type`, `fire_type_label`, `jurisdiction`, `jurisdiction_label`, `state`, `po_method`, `latitude`, `longitude`, `poly_date`, `created_on`, `modified_on`.
 - **Coverage:** US wildland fire perimeters from the Wildland Fire Interagency Geospatial Services (WFIGS) system. Includes all active incidents with perimeter polygons.
 - **Data:** Incident name, IRWIN ID, fire size, containment percentage, type, jurisdiction, and geographic coordinates.

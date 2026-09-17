@@ -11,24 +11,22 @@ class USGSNWISDownloader(BaseDownloader):
     from the USGS National Water Information System.
     """
 
-    BASE_URL = "https://waterservices.usgs.gov/nwis/dv/"
-
     def __init__(self, timeout: int = 60, logger=None, log_folder: str | None = None,
                  sites: str = "01646500", parameter_code: str = "00060"):
         super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
         self._sites = sites
         self._parameter_code = parameter_code
 
-    def _build_url(self, start_date: dt.datetime, end_date: dt.datetime) -> str:
+    def _build_url(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> str:
         """Build the API query URL."""
         params = [
             "format=json",
             f"sites={self._sites}",
             f"parameterCd={self._parameter_code}",
-            f"startDT={start_date.strftime('%Y-%m-%d')}",
-            f"endDT={end_date.strftime('%Y-%m-%d')}",
+            f"startDT={self._format_date(start_date)}",
+            f"endDT={self._format_date(end_date)}",
         ]
-        return f"{self.BASE_URL}?{'&'.join(params)}"
+        return f"{base_url}?{'&'.join(params)}"
 
     def _build_record(self, time_series: dict, value_entry: dict, site_info: dict) -> dict:
         """Extract a flat record dict from a time series value."""
@@ -59,10 +57,11 @@ class USGSNWISDownloader(BaseDownloader):
         self.logger.info(f"Downloading USGS NWIS daily data for {start_date.date()} to {end_date.date()}")
         self.logger.info(f"  sites={self._sites}, parameter={self._parameter_code}")
 
-        url = self._build_url(start_date, end_date)
+        url = self._build_url(base_url, start_date, end_date)
         data = self._get_json(url)
 
-        if not data or not isinstance(data, dict):
+        data = self._validate_dict_response(data, "USGS NWIS")
+        if not data:
             return []
 
         time_series_list = data.get("value", {}).get("timeSeries", [])

@@ -11,8 +11,6 @@ class NIFCDownloader(BaseDownloader):
     to get current interagency fire perimeters for the United States.
     """
 
-    WFIGS_PERIMETERS_URL = "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query"
-
     def _build_record(self, feature: dict) -> dict:
         """Extract a flat record dict from an ArcGIS feature."""
         attrs = feature.get("attributes", {})
@@ -26,9 +24,6 @@ class NIFCDownloader(BaseDownloader):
         else:
             centroid_lon = ""
             centroid_lat = ""
-
-        poly_date = attrs.get("poly_GIS Acres", "")
-        fire_size = attrs.get("poly_IncidentName", "")
 
         return {
             "incident_name": attrs.get("poly_IncidentName", ""),
@@ -56,10 +51,7 @@ class NIFCDownloader(BaseDownloader):
         """
         self.logger.info(f"Downloading NIFC fire perimeter data for {start_date.date()} to {end_date.date()}")
 
-        start_ms = int(start_date.timestamp() * 1000)
-        end_ms = int(end_date.timestamp() * 1000)
-
-        where_clause = f"poly_DateCurrent >= TIMESTAMP '{start_date.strftime('%Y-%m-%d %H:%M:%S')}' AND poly_DateCurrent <= TIMESTAMP '{end_date.strftime('%Y-%m-%d %H:%M:%S')}'"
+        where_clause = f"poly_DateCurrent >= TIMESTAMP '{self._format_datetime(start_date)}' AND poly_DateCurrent <= TIMESTAMP '{self._format_datetime(end_date)}'"
 
         params = {
             "where": where_clause,
@@ -71,15 +63,14 @@ class NIFCDownloader(BaseDownloader):
         }
 
         query_string = "&".join(f"{k}={v}" for k, v in params.items())
-        url = f"{self.WFIGS_PERIMETERS_URL}?{query_string}"
+        url = f"{base_url}?{query_string}"
 
         data = self._get_json(url)
-
-        if not data or not isinstance(data, dict):
-            self.logger.warning("No data received from NIFC API")
+        data = self._validate_dict_response(data, "NIFC")
+        if not data:
             return []
 
-        features = data.get("features", [])
+        features = self._extract_features(data)
         self.logger.info(f"Received {len(features)} fire perimeter features")
 
         all_records: list[dict] = []

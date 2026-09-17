@@ -16,8 +16,6 @@ class USGSVolcanoDownloader(BaseDownloader):
     Northern Mariana Islands (NMI), and Yellowstone (YVO).
     """
 
-    ELEVATED_URL = "https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes"
-
     def _build_record(self, volcano: dict) -> dict:
         """Extract a flat record dict from a volcano status entry."""
         return {
@@ -42,14 +40,14 @@ class USGSVolcanoDownloader(BaseDownloader):
         """
         self.logger.info(f"Downloading USGS Volcano data for {start_date.date()} to {end_date.date()}")
 
-        data = self._get_json(self.ELEVATED_URL)
-
-        if not data or not isinstance(data, list):
-            self.logger.warning("No data received from USGS Volcano API")
+        url = f"{base_url}/getElevatedVolcanoes"
+        data = self._get_json(url)
+        data = self._validate_list_response(data, "USGS Volcano")
+        if not data:
             return []
 
-        start_str = start_date.strftime("%Y-%m-%d")
-        end_str = end_date.strftime("%Y-%m-%d")
+        start_str = self._format_date(start_date)
+        end_str = self._format_date(end_date)
 
         all_records: list[dict] = []
         for volcano in data:
