@@ -45,6 +45,15 @@
       "output_folder": "data/USGS_NWIS",
       "output_file_pattern": "streamflow_{date}.csv",
       "is_date_to_previous_day": true
+    },
+    "Avalanche_ORG": {
+      "type": "avalanche_org",
+      "enabled": true,
+      "api_url": "https://api.avalanche.org/v2/public/products/map-layer",
+      "start_date": "2026-09-01",
+      "output_folder": "data/Avalanche_ORG",
+      "output_file_pattern": "avalanche_{date}.csv",
+      "is_date_to_previous_day": true
     }
   }
 }
