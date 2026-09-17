@@ -9,3 +9,5 @@ class ESourceType(str, Enum):
     USGS_NWIS = "usgs_nwis"
     AVALANCHE_ORG = "avalanche_org"
     IBTRACS = "ibtracs"
+    USGS_VOLCANO = "usgs_volcano"
+    NIFC = "nifc"

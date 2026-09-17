@@ -63,6 +63,24 @@
       "output_folder": "data/IBTrACS",
       "output_file_pattern": "cyclones_{date}.csv",
       "is_date_to_previous_day": true
+    },
+    "USGS_Volcano": {
+      "type": "usgs_volcano",
+      "enabled": true,
+      "api_url": "https://volcanoes.usgs.gov/hans-public/api/volcano",
+      "start_date": "2026-09-01",
+      "output_folder": "data/USGS_Volcano",
+      "output_file_pattern": "volcanoes_{date}.csv",
+      "is_date_to_previous_day": true
+    },
+    "NIFC": {
+      "type": "nifc",
+      "enabled": true,
+      "api_url": "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query",
+      "start_date": "2026-09-01",
+      "output_folder": "data/NIFC",
+      "output_file_pattern": "fires_{date}.csv",
+      "is_date_to_previous_day": true
     }
   }
 }
