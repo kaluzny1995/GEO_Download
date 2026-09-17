@@ -107,7 +107,7 @@ def main():
     create_folders(source)
 
     # Initialize downloader based on source type
-    downloader = get_downloader(source.type, logger=logger)
+    downloader = get_downloader(source.type, logger=logger, **source.params)
 
     # Download data for each day in the date range
     for date in util.date_range(load_params.date_from, load_params.date_to):

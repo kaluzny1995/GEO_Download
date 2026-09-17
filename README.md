@@ -13,6 +13,7 @@ GEO_Download fetches data from public geospatial APIs and saves it locally as da
 | NASA EONET | [EONET API v3](https://eonet.gsfc.nasa.gov/api/v3/) | Natural events — wildfires, storms, floods, volcanoes, earthquakes, drought, landslides, sea ice, temperature extremes (lat/lon, time-series tracks, magnitude) |
 | Open-Meteo Flood | [Flood API](https://open-meteo.com/en/docs/flood-api) | Daily river discharge (m³/s) for 126 major world rivers (GloFAS model, historical from 1984 + 30-day forecast) |
 | USGS NWIS | [WaterServices API](https://waterservices.usgs.gov/nwis/dv/) | Daily streamflow (ft³/s) from USGS stream gauges (site-specific, US only, decades of history) |
+| IBTrACS | [NOAA IBTrACS](https://www.ncei.noaa.gov/products/international-best-track-archive) | Global tropical cyclone best-track data — storm position, wind speed, pressure, landfall info (all ocean basins, 1842-present) |
 
 All sources support two loading modes:
 
@@ -58,7 +59,7 @@ GEO_Download/
 │   ├── source_config.py       # SourceConfig — per-source settings
 │   ├── download_params.py     # DownloadParams — download parameters
 │   ├── load_params.py         # LoadParams — determines load type and date range
-│   ├── e_source_type.py       # ESourceType enum (usgs_earthquake, gdacs, eonet, openmeteo_flood, usgs_nwis)
+│   ├── e_source_type.py       # ESourceType enum (usgs_earthquake, gdacs, eonet, openmeteo_flood, usgs_nwis, ibtracs, nasa_firms)
 │   └── e_load_type.py         # ELoadType enum (HISTORICAL / INCREMENTAL)
 ├── downloader/                # Downloader classes (base + concrete implementations)
 │   ├── __init__.py            # Imports + factory registrations
@@ -67,7 +68,8 @@ GEO_Download/
 │   ├── gdacs.py               # GDACSDownloader
 │   ├── eonet.py               # EONETDownloader
 │   ├── openmeteo_flood.py     # OpenMeteoFloodDownloader
-│   └── usgs_nwis.py           # USGSNWISDownloader
+│   ├── usgs_nwis.py           # USGSNWISDownloader
+│   ├── ibtracs.py             # IBTrACSDownloader
 ├── test/                      # Unit tests
 │   ├── test_base_downloader.py
 │   ├── test_models.py
@@ -77,20 +79,23 @@ GEO_Download/
 │   ├── test_gdacs_downloader.py
 │   ├── test_eonet_downloader.py
 │   ├── test_openmeteo_flood_downloader.py
-│   └── test_usgs_nwis_downloader.py
+│   ├── test_usgs_nwis_downloader.py
+│   ├── test_ibtracs_downloader.py
 ├── data/                      # Downloaded CSV files (per source subfolder)
 │   ├── USGS_Earthquake/
 │   ├── GDACS/
 │   ├── EONET/
 │   ├── OpenMeteo_Flood/
 │   ├── USGS_NWIS/
+│   ├── IBTrACS/
 │   └── rivers.json            # River definitions (126 major world rivers)
 └── logs/                      # Timestamped log files (per source subfolder)
     ├── USGS_Earthquake/
     ├── GDACS/
     ├── EONET/
     ├── OpenMeteo_Flood/
-    └── USGS_NWIS/
+    ├── USGS_NWIS/
+    ├── IBTrACS/
 ```
 
 ## Configuration
@@ -144,6 +149,15 @@ The application is configured via `config.json`. Each data source is defined und
       "output_folder": "data/USGS_NWIS",
       "output_file_pattern": "streamflow_{date}.csv",
       "is_date_to_previous_day": true
+    },
+    "IBTrACS": {
+      "type": "ibtracs",
+      "enabled": true,
+      "api_url": "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv",
+      "start_date": "2026-09-01",
+      "output_folder": "data/IBTrACS",
+      "output_file_pattern": "cyclones_{date}.csv",
+      "is_date_to_previous_day": true
     }
   }
 }
@@ -174,7 +188,7 @@ conda activate geo_download_311
 python run_download.py <source_name>
 ```
 
-Where `<source_name>` matches a key in `config.json` (e.g. `USGS_Earthquake`, `GDACS`, `EONET`, `OpenMeteo_Flood`, `USGS_NWIS`).
+Where `<source_name>` matches a key in `config.json` (e.g. `USGS_Earthquake`, `GDACS`, `EONET`, `OpenMeteo_Flood`, `USGS_NWIS`, `IBTrACS`).
 
 Only enabled sources are accepted as valid arguments. The application will:
 
@@ -233,6 +247,10 @@ python run_download.py OpenMeteo_Flood
 python run_download.py USGS_NWIS
 ```
 
+**Global tropical cyclones (IBTrACS):**
+
+```bash
+python run_download.py IBTrACS
 ```
 ---- GDACS Downloader ----
 
@@ -289,6 +307,14 @@ Downloaded files are saved as CSV with one file per day, named by date.
 - **Coverage:** USGS stream gauges across the United States. Configure via `sites` parameter in constructor (comma-separated site numbers).
 - **Default site:** USGS-01646500 (Potomac River near Washington DC).
 
+### IBTrACS (Global Tropical Cyclones)
+
+- **Location:** `data/IBTrACS/cyclones_YYYY-MM-DD.csv`
+- **Columns:** 11 fields — `SEASON`, `BASIN`, `SUBBASIN`, `ISO_TIME`, `NATURE`, `LAT`, `LON`, `WMO_WIND`, `WMO_PRES`, `DIST2LAND`, `LANDFALL`.
+- **Coverage:** Global tropical cyclone best-track data from all ocean basins (NA, EP, WP, NI, SI, SP). Data from 1842 to present, updated 3x/week.
+- **Wind speed:** Maximum sustained wind in knots (WMO_WIND). 35 kt = tropical storm, 64 kt = hurricane/cyclone/typhoon.
+- **Dataset options:** Default uses `last3years` for efficient incremental downloads. Can be configured to `all` for full historical data.
+
 ## Testing
 
 ```bash
@@ -305,6 +331,7 @@ Tests cover:
 - **EONET downloader** — event parsing (Point/Polygon geometry), closed events, missing geometry, empty/no-data handling.
 - **Open-Meteo Flood downloader** — river discharge queries, null value handling, multi-river aggregation.
 - **USGS NWIS downloader** — legacy WaterServices API, time series parsing, site metadata extraction.
+- **IBTrACS downloader** — CSV parsing with units row skip, date filtering, custom dataset selection, error handling.
 
 ## Dataflow
 
@@ -326,21 +353,25 @@ flowchart TD
     K -->|eonet| N[EONETDownloader]
     K -->|openmeteo_flood| O[OpenMeteoFloodDownloader]
     K -->|usgs_nwis| P[USGSNWISDownloader]
+    K -->|ibtracs| IB[IBTrACSDownloader]
     L -->|HTTP GET with retry| Q[USGS FDSN API]
     M -->|HTTP GET with pagination| R[GDACS REST API]
     N -->|HTTP GET| S[NASA EONET API]
     O -->|HTTP GET per river| T[Open-Meteo Flood API]
     P -->|HTTP GET| U[USGS WaterServices API]
+    IB -->|HTTP GET| V2[NOAA IBTrACS CSV]
     Q -->|CSV response| V[Parse CSV to list of dicts]
     R -->|GeoJSON response| W[Parse features to flat records]
     S -->|JSON response| X[Parse events to flat records]
     T -->|JSON response per river| Y[Aggregate discharge records]
     U -->|JSON response| Z[Parse time series to flat records]
+    V2 -->|CSV response + date filter| V3[Parse and filter cyclone records]
     V -->|per day| AA[Save to USGS_Earthquake]
     W -->|per day| AB[Save to GDACS]
     X -->|per day| AC[Save to EONET]
     Y -->|per day| AD[Save to OpenMeteo_Flood]
     Z -->|per day| AE[Save to USGS_NWIS]
+    V3 -->|per day| AF2[Save to IBTrACS]
     H -->|logging| AF[logs/SourceName/download_*.log]
 ```
 

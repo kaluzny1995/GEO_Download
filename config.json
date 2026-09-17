@@ -54,6 +54,15 @@
       "output_folder": "data/Avalanche_ORG",
       "output_file_pattern": "avalanche_{date}.csv",
       "is_date_to_previous_day": true
+    },
+    "IBTrACS": {
+      "type": "ibtracs",
+      "enabled": true,
+      "api_url": "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv",
+      "start_date": "2026-09-01",
+      "output_folder": "data/IBTrACS",
+      "output_file_pattern": "cyclones_{date}.csv",
+      "is_date_to_previous_day": true
     }
   }
 }

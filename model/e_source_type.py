@@ -8,3 +8,4 @@ class ESourceType(str, Enum):
     OPENMETEO_FLOOD = "openmeteo_flood"
     USGS_NWIS = "usgs_nwis"
     AVALANCHE_ORG = "avalanche_org"
+    IBTRACS = "ibtracs"

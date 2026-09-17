@@ -5,6 +5,7 @@ from downloader.eonet import EONETDownloader
 from downloader.openmeteo_flood import OpenMeteoFloodDownloader
 from downloader.usgs_nwis import USGSNWISDownloader
 from downloader.avalanche_org import AvalancheOrgDownloader
+from downloader.ibtracs import IBTrACSDownloader
 from downloader_factory import DownloaderFactory
 from model.e_source_type import ESourceType
 
@@ -15,6 +16,7 @@ DownloaderFactory.register(ESourceType.EONET, EONETDownloader)
 DownloaderFactory.register(ESourceType.OPENMETEO_FLOOD, OpenMeteoFloodDownloader)
 DownloaderFactory.register(ESourceType.USGS_NWIS, USGSNWISDownloader)
 DownloaderFactory.register(ESourceType.AVALANCHE_ORG, AvalancheOrgDownloader)
+DownloaderFactory.register(ESourceType.IBTRACS, IBTrACSDownloader)
 
 __all__ = [
     "BaseDownloader",
@@ -24,4 +26,5 @@ __all__ = [
     "OpenMeteoFloodDownloader",
     "USGSNWISDownloader",
     "AvalancheOrgDownloader",
+    "IBTrACSDownloader",
 ]
