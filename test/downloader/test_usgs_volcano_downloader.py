@@ -1,23 +1,11 @@
-import pytest
 import datetime as dt
 from unittest.mock import patch, MagicMock
 
+import requests.exceptions
+
 from downloader.usgs_volcano import USGSVolcanoDownloader
 
-
-class MockLogger:
-    def __init__(self):
-        self.messages = []
-
-    def info(self, msg):
-        self.messages.append(("INFO", msg))
-
-    def error(self, msg):
-        self.messages.append(("ERROR", msg))
-
-    def warning(self, msg):
-        self.messages.append(("WARNING", msg))
-
+from test.downloader.conftest import MockLogger
 
 TEST_BASE_URL = "https://volcanoes.usgs.gov/hans-public/api/volcano"
 
@@ -172,7 +160,7 @@ def test_download_by_date_range_connection_error():
     logger = MockLogger()
     downloader = USGSVolcanoDownloader(logger=logger)
 
-    with patch.object(downloader.session, "get", side_effect=Exception("Connection refused")):
+    with patch.object(downloader.session, "get", side_effect=requests.exceptions.ConnectionError("Connection refused")):
         result = downloader.download_by_date_range(TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2))
 
     assert result == []

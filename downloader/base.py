@@ -2,8 +2,12 @@ from __future__ import annotations
 import abc
 import csv
 import io
+import logging
 import datetime as dt
+from collections.abc import Callable
+
 import requests
+from requests.exceptions import RequestException
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
@@ -13,9 +17,12 @@ from util import setup_logger
 class BaseDownloader(abc.ABC):
     """Abstract base class for all data source downloaders."""
 
-    __slots__ = ("session", "timeout", "logger")
+    session: requests.Session
+    timeout: int
+    logger: logging.Logger
 
-    def __init__(self, timeout: int = 30, logger=None, log_folder: str | None = None):
+    def __init__(self, timeout: int = 30, logger: logging.Logger | None = None,
+                 log_folder: str | None = None) -> None:
         self.timeout = timeout
         if logger:
             self.logger = logger
@@ -70,42 +77,53 @@ class BaseDownloader(abc.ABC):
             return None
         return data
 
-    def _extract_features(self, data: dict, source_name: str = "") -> list[dict]:
+    @staticmethod
+    def _extract_features(data: dict) -> list[dict]:
         """Extract features array from a dict response. Returns empty list if not found."""
         return data.get("features", [])
 
     def _get_json(self, url: str) -> list | dict | None:
         """Fetch JSON from URL, return None on error."""
         self.logger.info(f"Fetching: {url}")
-        try:
-            response = self.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            self.logger.error(f"Failed to fetch {url}: {e}")
-            return None
-
-    def _download_csv(self, url: str) -> list[dict]:
-        """Download CSV from URL and return list of dicts."""
-        self.logger.info(f"Downloading CSV from: {url}")
         response = None
         try:
             response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
-            self.logger.info("Download successful")
-        except Exception as e:
+            data = response.json()
+            return data
+        except RequestException as e:
+            self.logger.error(f"Failed to fetch {url}: {e}")
+            return None
+        finally:
             if response is not None:
-                self.logger.error(f"Download failed: {response.status_code} - {e}")
-            else:
-                self.logger.error(f"Download failed: {e}")
+                response.close()
+
+    def _download_csv(self, url: str) -> list[dict]:
+        """Download CSV from URL and return list of dicts.
+
+        Streams the response line-by-line to avoid loading the entire body
+        into memory at once.
+        """
+        self.logger.info(f"Downloading CSV from: {url}")
+        response = None
+        try:
+            response = self.session.get(url, timeout=self.timeout, stream=True)
+            response.raise_for_status()
+            self.logger.info("Download successful")
+        except RequestException as e:
+            self.logger.error(f"Download failed: {e}")
             return []
 
-        reader = csv.DictReader(io.StringIO(response.text))
-        records = list(reader)
-        self.logger.info(f"Downloaded {len(records)} records")
-        return records
+        try:
+            lines = (line.decode("utf-8", errors="replace") for line in response.iter_lines())
+            reader = csv.DictReader(lines)
+            records = list(reader)
+            self.logger.info(f"Downloaded {len(records)} records")
+            return records
+        finally:
+            response.close()
 
-    def _download_csv_with_filter(self, url: str, filter_func=None) -> list[dict]:
+    def _download_csv_with_filter(self, url: str, filter_func: Callable[[str], list[dict]] | None = None) -> list[dict]:
         """Download CSV from URL with optional custom filter/parser.
 
         Args:
@@ -114,23 +132,31 @@ class BaseDownloader(abc.ABC):
                          If provided, uses this instead of default DictReader parsing.
         """
         self.logger.info(f"Downloading CSV from: {url}")
-        response = None
-        try:
-            response = self.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            self.logger.info("Download successful")
-        except Exception as e:
-            if response is not None:
-                self.logger.error(f"Download failed: {response.status_code} - {e}")
-            else:
-                self.logger.error(f"Download failed: {e}")
+        response = self._fetch_response(url)
+        if response is None:
             return []
 
+        try:
+            text = response.text
+        finally:
+            response.close()
+
         if filter_func:
-            records = filter_func(response.text)
+            records = filter_func(text)
         else:
-            reader = csv.DictReader(io.StringIO(response.text))
+            reader = csv.DictReader(io.StringIO(text))
             records = list(reader)
 
         self.logger.info(f"Downloaded {len(records)} records")
         return records
+
+    def _fetch_response(self, url: str) -> requests.Response | None:
+        """Fetch a response from URL, return None on error."""
+        try:
+            response = self.session.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            self.logger.info("Download successful")
+            return response
+        except RequestException as e:
+            self.logger.error(f"Download failed: {e}")
+            return None

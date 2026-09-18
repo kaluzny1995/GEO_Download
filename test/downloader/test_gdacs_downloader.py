@@ -1,22 +1,9 @@
-import pytest
 import datetime as dt
 from unittest.mock import patch, MagicMock
 
 from downloader.gdacs import GDACSDownloader
 
-
-class MockLogger:
-    def __init__(self):
-        self.messages = []
-
-    def info(self, msg):
-        self.messages.append(("INFO", msg))
-
-    def error(self, msg):
-        self.messages.append(("ERROR", msg))
-
-    def warning(self, msg):
-        self.messages.append(("WARNING", msg))
+from test.downloader.conftest import MockLogger
 
 
 SAMPLE_FEATURES = [
@@ -68,13 +55,10 @@ def _create_downloader(logger=None):
 
 
 def test_build_record():
-    # Arrange
     downloader = _create_downloader()
 
-    # Act
     record = downloader._build_record(SAMPLE_FEATURES[0])
 
-    # Assert
     assert record["event_type"] == "EQ"
     assert record["event_id"] == 1566388
     assert record["event_name"] == "Earthquake in Argentina"
@@ -91,20 +75,16 @@ def test_build_record():
 
 
 def test_build_record_missing_geometry():
-    # Arrange
     downloader = _create_downloader()
     feature = {"type": "Feature", "geometry": None, "properties": {"eventtype": "EQ", "eventid": 1}}
 
-    # Act
     record = downloader._build_record(feature)
 
-    # Assert
     assert record["latitude"] is None
     assert record["longitude"] is None
 
 
 def test_download_by_date_range():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
@@ -112,14 +92,12 @@ def test_download_by_date_range():
         return {"type": "FeatureCollection", "features": SAMPLE_FEATURES}
 
     with patch.object(GDACSDownloader, "_get_json", side_effect=mock_get_json):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 14),
             dt.datetime(2026, 9, 15),
         )
 
-    # Assert
     assert len(result) == 2
     assert result[0]["event_type"] == "EQ"
     assert result[0]["country"] == "Argentina"
@@ -128,12 +106,11 @@ def test_download_by_date_range():
 
 
 def test_download_by_date_range_pagination():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
-    page1_features = SAMPLE_FEATURES * 50  # 100 features
-    page2_features = SAMPLE_FEATURES[:1]   # 1 feature
+    page1_features = SAMPLE_FEATURES * 50
+    page2_features = SAMPLE_FEATURES[:1]
 
     call_count = 0
 
@@ -145,47 +122,39 @@ def test_download_by_date_range_pagination():
         return {"type": "FeatureCollection", "features": page2_features}
 
     with patch.object(GDACSDownloader, "_get_json", side_effect=mock_get_json):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 14),
             dt.datetime(2026, 9, 15),
         )
 
-    # Assert
     assert len(result) == 101
     assert call_count == 2
 
 
 def test_download_by_date_range_empty():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
     with patch.object(GDACSDownloader, "_get_json", return_value={"type": "FeatureCollection", "features": []}):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
             dt.datetime(2026, 9, 2),
         )
 
-    # Assert
     assert result == []
 
 
 def test_download_by_date_range_no_data():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
     with patch.object(GDACSDownloader, "_get_json", return_value=None):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
             dt.datetime(2026, 9, 2),
         )
 
-    # Assert
     assert result == []

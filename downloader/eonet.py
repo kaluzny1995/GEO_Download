@@ -44,7 +44,7 @@ class EONETDownloader(BaseDownloader):
         }
 
     @staticmethod
-    def _extract_coords(geom: dict) -> tuple:
+    def _extract_coords(geom: dict) -> tuple[str, str]:
         """Extract (latitude, longitude) from a geometry dict.
 
         Handles Point ([lon, lat]) and Polygon ([[[lon, lat], ...]]) formats.

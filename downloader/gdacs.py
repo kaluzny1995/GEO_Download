@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 import datetime as dt
 
 from downloader.base import BaseDownloader
@@ -13,7 +14,8 @@ class GDACSDownloader(BaseDownloader):
 
     __slots__ = ("_event_types", "_page_size")
 
-    def __init__(self, timeout: int = 30, logger=None, log_folder: str | None = None,
+    def __init__(self, timeout: int = 30, logger: logging.Logger | None = None,
+                 log_folder: str | None = None,
                  event_types: str = "EQ;TC;FL;VO;WF;DR", page_size: int = 100):
         super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
         self._event_types = event_types
@@ -46,7 +48,7 @@ class GDACSDownloader(BaseDownloader):
             "is_current": props.get("iscurrent", ""),
         }
 
-    def _fetch_page(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime, page: int) -> list[dict]:
+    def _fetch_page(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime, page: int) -> list[dict]:  # noqa: E501
         """Fetch a single page of GDACS events."""
         params = (
             f"?eventlist={self._event_types}"

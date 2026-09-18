@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 import datetime as dt
 import json
 from pathlib import Path
@@ -15,7 +16,8 @@ class OpenMeteoFloodDownloader(BaseDownloader):
 
     DEFAULT_RIVERS_FILE = str(Path(__file__).resolve().parent.parent / "data" / "rivers.json")
 
-    def __init__(self, timeout: int = 30, logger=None, log_folder: str | None = None,
+    def __init__(self, timeout: int = 30, logger: logging.Logger | None = None,
+                 log_folder: str | None = None,
                  rivers_file: str | None = None):
         super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
         self._rivers_file = rivers_file or self.DEFAULT_RIVERS_FILE

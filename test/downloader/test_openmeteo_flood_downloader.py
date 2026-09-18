@@ -1,4 +1,3 @@
-import pytest
 import datetime as dt
 import json
 import os
@@ -7,19 +6,7 @@ from unittest.mock import patch, MagicMock
 
 from downloader.openmeteo_flood import OpenMeteoFloodDownloader
 
-
-class MockLogger:
-    def __init__(self):
-        self.messages = []
-
-    def info(self, msg):
-        self.messages.append(("INFO", msg))
-
-    def error(self, msg):
-        self.messages.append(("ERROR", msg))
-
-    def warning(self, msg):
-        self.messages.append(("WARNING", msg))
+from test.downloader.conftest import MockLogger
 
 
 SAMPLE_RIVERS = [

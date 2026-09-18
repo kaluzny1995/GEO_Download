@@ -113,7 +113,7 @@ def test_download_no_data(mock_get_json):
 @patch("downloader.base.BaseDownloader._get_json")
 def test_download_multiple_days(mock_get_json):
     feature1 = _make_feature(danger_level=2, danger="moderate")
-    feature2 = _make_feature(danger_level=3, danger="considerable", zone_name=" Mosquito Range")
+    feature2 = _make_feature(danger_level=3, danger="considerable", zone_name="Mosquito Range")
     mock_get_json.side_effect = [
         {"type": "FeatureCollection", "features": [feature1]},
         {"type": "FeatureCollection", "features": [feature2]},

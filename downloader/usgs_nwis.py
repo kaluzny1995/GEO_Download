@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 import datetime as dt
 
 from downloader.base import BaseDownloader
@@ -11,7 +12,8 @@ class USGSNWISDownloader(BaseDownloader):
     from the USGS National Water Information System.
     """
 
-    def __init__(self, timeout: int = 60, logger=None, log_folder: str | None = None,
+    def __init__(self, timeout: int = 60, logger: logging.Logger | None = None,
+                 log_folder: str | None = None,
                  sites: str = "01646500", parameter_code: str = "00060"):
         super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
         self._sites = sites

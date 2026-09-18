@@ -1,7 +1,10 @@
 from __future__ import annotations
 import csv
 import io
+import logging
 import datetime as dt
+
+import requests
 
 from downloader.base import BaseDownloader
 
@@ -13,11 +16,15 @@ class IBTrACSDownloader(BaseDownloader):
     data, merging best-track data from WMO Regional Specialized Meteorological
     Centres worldwide. Data includes storm position, wind speed, pressure,
     and landfall information.
+
+    Memory-optimised: streams the CSV line-by-line and filters rows during
+    the stream so the full multi-hundred-MB dataset is never held in memory.
     """
 
     __slots__ = ("_dataset",)
 
-    def __init__(self, timeout: int = 60, logger=None, log_folder: str | None = None,
+    def __init__(self, timeout: int = 60, logger: logging.Logger | None = None,
+                 log_folder: str | None = None,
                  dataset: str = "last3years"):
         super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
         self._dataset = dataset
@@ -26,48 +33,67 @@ class IBTrACSDownloader(BaseDownloader):
         """Build the download URL for the IBTrACS dataset."""
         return f"{base_url}/ibtracs.{self._dataset}.list.v04r01.csv"
 
-    def _parse_csv(self, text: str) -> list[dict]:
-        """Parse IBTrACS CSV text, skipping the units row (row 2)."""
-        lines = text.splitlines()
-        if len(lines) < 3:
-            self.logger.warning("CSV response has fewer than 3 lines, nothing to parse.")
-            return []
-
-        filtered_lines = [lines[0]] + lines[2:]
-        reader = csv.DictReader(io.StringIO("\n".join(filtered_lines)))
-        return list(reader)
-
-    def _filter_by_date(self, records: list[dict], start_date: dt.datetime,
-                        end_date: dt.datetime) -> list[dict]:
-        """Filter records to only those within the requested date range."""
-        start_str = self._format_date(start_date)
-        end_str = self._format_date(end_date)
-        filtered = []
-
-        for record in records:
-            iso_time = record.get("ISO_TIME", "").strip()
-            if not iso_time:
-                continue
-            record_date = iso_time[:10]
-            if start_str <= record_date < end_str:
-                filtered.append(record)
-
-        return filtered
-
     def download_by_date_range(self, base_url: str, start_date: dt.datetime,
                                end_date: dt.datetime) -> list[dict]:
         """Download IBTrACS tropical cyclone data for the given date range.
 
-        Downloads the configured IBTrACS dataset (default: last3years) and
-        filters records to only those within the requested date range.
+        Streams the CSV response line-by-line, skipping the units row (row 2),
+        and only keeps records whose ISO_TIME falls within [start_date, end_date].
+        The full multi-hundred-MB dataset is never materialized in memory.
         """
         url = self._build_url(base_url)
+        start_str = self._format_date(start_date)
+        end_str = self._format_date(end_date)
+
         self.logger.info(f"Downloading IBTrACS data from: {url}")
-        self.logger.info(f"Filtering for period: {start_date.date()} to {end_date.date()}")
+        self.logger.info(f"Filtering for period: {start_str} to {end_str}")
 
-        all_records = self._download_csv_with_filter(url, filter_func=self._parse_csv)
-        self.logger.info(f"Parsed {len(all_records)} total records from IBTrACS")
+        try:
+            response = self.session.get(url, timeout=self.timeout, stream=True)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Failed to fetch IBTrACS: {e}")
+            return []
 
-        filtered = self._filter_by_date(all_records, start_date, end_date)
-        self.logger.info(f"Filtered to {len(filtered)} records for the date range")
-        return filtered
+        try:
+            filtered: list[dict] = []
+            header: list[str] | None = None
+            row_count = 0
+            kept_count = 0
+
+            for raw_line in response.iter_lines():
+                line = raw_line.decode("utf-8", errors="replace")
+                row_count += 1
+
+                # Row 1: header
+                if header is None:
+                    header = line.split(",")
+                    continue
+
+                # Row 2: units — skip
+                if row_count == 2:
+                    continue
+
+                # Parse ISO_TIME from the raw line to avoid materializing a dict.
+                # Header: SEASON,BASIN,SUBBASIN,ISO_TIME,...
+                # ISO_TIME is column index 3 in IBTrACS v04r01.
+                try:
+                    fields = next(csv.reader(io.StringIO(line)))
+                    iso_time = fields[3].strip() if len(fields) > 3 else ""
+                except (StopIteration, IndexError):
+                    continue
+
+                if not iso_time:
+                    continue
+
+                record_date = iso_time[:10]
+                if start_str <= record_date < end_str:
+                    # Only now build the full dict
+                    row_dict = dict(zip(header, fields))
+                    filtered.append(row_dict)
+                    kept_count += 1
+
+            self.logger.info(f"Scanned {row_count} rows, kept {kept_count} records for the date range")
+            return filtered
+        finally:
+            response.close()

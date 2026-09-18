@@ -1,22 +1,9 @@
-import pytest
 import datetime as dt
 from unittest.mock import patch, MagicMock
 
 from downloader.eonet import EONETDownloader
 
-
-class MockLogger:
-    def __init__(self):
-        self.messages = []
-
-    def info(self, msg):
-        self.messages.append(("INFO", msg))
-
-    def error(self, msg):
-        self.messages.append(("ERROR", msg))
-
-    def warning(self, msg):
-        self.messages.append(("WARNING", msg))
+from test.downloader.conftest import MockLogger
 
 
 SAMPLE_EVENTS = [
@@ -64,13 +51,10 @@ def _create_downloader(logger=None):
 
 
 def test_build_record():
-    # Arrange
     downloader = _create_downloader()
 
-    # Act
     record = downloader._build_record(SAMPLE_EVENTS[0])
 
-    # Assert
     assert record["event_id"] == "EONET_24184"
     assert record["event_name"] == "Cyclone Norbert"
     assert record["category_id"] == "severeStorms"
@@ -90,13 +74,10 @@ def test_build_record():
 
 
 def test_build_record_closed_event():
-    # Arrange
     downloader = _create_downloader()
 
-    # Act
     record = downloader._build_record(SAMPLE_EVENTS[1])
 
-    # Assert
     assert record["event_id"] == "EONET_24180"
     assert record["event_name"] == "Wildfire in California"
     assert record["category_id"] == "wildfires"
@@ -106,13 +87,10 @@ def test_build_record_closed_event():
 
 
 def test_build_record_polygon_geometry():
-    # Arrange
     downloader = _create_downloader()
 
-    # Act
     record = downloader._build_record(SAMPLE_EVENTS[2])
 
-    # Assert
     assert record["event_id"] == "EONET_24190"
     assert record["category_id"] == "floods"
     assert record["latitude"] == 92.62
@@ -122,19 +100,16 @@ def test_build_record_polygon_geometry():
 
 
 def test_download_by_date_range():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
     with patch.object(EONETDownloader, "_get_json", return_value={"events": SAMPLE_EVENTS}):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 10),
             dt.datetime(2026, 9, 11),
         )
 
-    # Assert
     assert len(result) == 3
     assert result[0]["event_id"] == "EONET_24184"
     assert result[0]["category_name"] == "Severe Storms"
@@ -143,41 +118,34 @@ def test_download_by_date_range():
 
 
 def test_download_by_date_range_empty():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
     with patch.object(EONETDownloader, "_get_json", return_value={"events": []}):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
             dt.datetime(2026, 9, 2),
         )
 
-    # Assert
     assert result == []
 
 
 def test_download_by_date_range_no_data():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
     with patch.object(EONETDownloader, "_get_json", return_value=None):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
             dt.datetime(2026, 9, 2),
         )
 
-    # Assert
     assert result == []
 
 
 def test_build_record_missing_geometry():
-    # Arrange
     downloader = _create_downloader()
     event = {
         "id": "EONET_99999",
@@ -189,10 +157,8 @@ def test_build_record_missing_geometry():
         "geometry": [],
     }
 
-    # Act
     record = downloader._build_record(event)
 
-    # Assert
     assert record["event_id"] == "EONET_99999"
     assert record["latitude"] == ""
     assert record["longitude"] == ""

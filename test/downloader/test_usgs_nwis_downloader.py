@@ -1,22 +1,9 @@
-import pytest
 import datetime as dt
 from unittest.mock import patch, MagicMock
 
 from downloader.usgs_nwis import USGSNWISDownloader
 
-
-class MockLogger:
-    def __init__(self):
-        self.messages = []
-
-    def info(self, msg):
-        self.messages.append(("INFO", msg))
-
-    def error(self, msg):
-        self.messages.append(("ERROR", msg))
-
-    def warning(self, msg):
-        self.messages.append(("WARNING", msg))
+from test.downloader.conftest import MockLogger
 
 
 SAMPLE_API_RESPONSE = {
@@ -73,16 +60,13 @@ def _create_downloader(logger=None, sites="01646500"):
 
 
 def test_build_record():
-    # Arrange
     downloader = _create_downloader()
     ts = SAMPLE_API_RESPONSE["value"]["timeSeries"][0]
     value_entry = ts["values"][0]["value"][0]
     site_info = ts["sourceInfo"]
 
-    # Act
     record = downloader._build_record(ts, value_entry, site_info)
 
-    # Assert
     assert record["site_id"] == "USGS-01646500"
     assert record["site_name"] == "POTOMAC RIVER NEAR WASH, DC"
     assert record["parameter_code"] == "00060"
@@ -95,18 +79,15 @@ def test_build_record():
 
 
 def test_build_url():
-    # Arrange
     downloader = _create_downloader()
     base_url = "https://waterservices.usgs.gov/nwis/dv/"
 
-    # Act
     url = downloader._build_url(
         base_url,
         dt.datetime(2026, 9, 1),
         dt.datetime(2026, 9, 14),
     )
 
-    # Assert
     assert "sites=01646500" in url
     assert "parameterCd=00060" in url
     assert "startDT=2026-09-01" in url
@@ -115,19 +96,16 @@ def test_build_url():
 
 
 def test_download_by_date_range():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
     with patch.object(downloader, "_get_json", return_value=SAMPLE_API_RESPONSE):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
             dt.datetime(2026, 9, 2),
         )
 
-    # Assert
     assert len(result) == 3
     assert result[0]["site_id"] == "USGS-01646500"
     assert result[0]["date"] == "2026-09-01"
@@ -139,35 +117,29 @@ def test_download_by_date_range():
 
 
 def test_download_by_date_range_empty():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
     empty_response = {"value": {"timeSeries": []}}
     with patch.object(downloader, "_get_json", return_value=empty_response):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
             dt.datetime(2026, 9, 2),
         )
 
-    # Assert
     assert result == []
 
 
 def test_download_by_date_range_no_data():
-    # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
     with patch.object(downloader, "_get_json", return_value=None):
-        # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
             dt.datetime(2026, 9, 2),
         )
 
-    # Assert
     assert result == []

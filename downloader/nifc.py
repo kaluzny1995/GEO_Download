@@ -14,16 +14,6 @@ class NIFCDownloader(BaseDownloader):
     def _build_record(self, feature: dict) -> dict:
         """Extract a flat record dict from an ArcGIS feature."""
         attrs = feature.get("attributes", {})
-        geom = feature.get("geometry", {})
-
-        rings = geom.get("rings", [[]])
-        if rings and rings[0]:
-            first_ring = rings[0]
-            centroid_lon = sum(p[0] for p in first_ring) / len(first_ring)
-            centroid_lat = sum(p[1] for p in first_ring) / len(first_ring)
-        else:
-            centroid_lon = ""
-            centroid_lat = ""
 
         return {
             "incident_name": attrs.get("poly_IncidentName", ""),
@@ -37,8 +27,8 @@ class NIFCDownloader(BaseDownloader):
             "jurisdiction_label": attrs.get("poly_Jurisdiction_LABEL", ""),
             "state": attrs.get("poly_State", ""),
             "po_method": attrs.get("poly_POOState", ""),
-            "latitude": centroid_lat,
-            "longitude": centroid_lon,
+            "latitude": attrs.get("poly_Latitude", ""),
+            "longitude": attrs.get("poly_longitude", ""),
             "poly_date": attrs.get("poly_DateCurrent", ""),
             "created_on": attrs.get("attr_CreatedOnDateTime_dt", ""),
             "modified_on": attrs.get("attr_ModifiedOnDateTime_dt", ""),
@@ -48,6 +38,8 @@ class NIFCDownloader(BaseDownloader):
         """Download current wildland fire perimeters from NIFC for the given date range.
 
         Queries the WFIGS feature service for fires active during the date range.
+        Geometry is NOT requested — only the specific attribute fields used by
+        _build_record are fetched, which dramatically reduces response size.
         """
         self.logger.info(f"Downloading NIFC fire perimeter data for {start_date.date()} to {end_date.date()}")
 
@@ -55,8 +47,25 @@ class NIFCDownloader(BaseDownloader):
 
         params = {
             "where": where_clause,
-            "outFields": "*",
-            "returnGeometry": "true",
+            "outFields": ",".join([
+                "poly_IncidentName",
+                "poly_IRWINID",
+                "poly_FireDiscoveryDateTime",
+                "poly_GIS Acres",
+                "poly_PercentContained",
+                "poly_FireType",
+                "poly_FireType_LABEL",
+                "poly_Jurisdiction",
+                "poly_Jurisdiction_LABEL",
+                "poly_State",
+                "poly_POOState",
+                "poly_Latitude",
+                "poly_longitude",
+                "poly_DateCurrent",
+                "attr_CreatedOnDateTime_dt",
+                "attr_ModifiedOnDateTime_dt",
+            ]),
+            "returnGeometry": "false",
             "outSR": "4326",
             "f": "json",
             "resultRecordCount": 2000,
@@ -66,8 +75,8 @@ class NIFCDownloader(BaseDownloader):
         url = f"{base_url}?{query_string}"
 
         data = self._get_json(url)
-        data = self._validate_dict_response(data, "NIFC")
-        if not data:
+        if not isinstance(data, dict):
+            self.logger.warning("No data received from NIFC API")
             return []
 
         features = self._extract_features(data)
