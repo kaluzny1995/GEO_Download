@@ -48,6 +48,9 @@ The architecture is extensible: new data sources can be added by implementing a 
 
 ## Project Structure
 
+<details>
+<summary style="font-size: 1.1em"><i>Click to expand</i></summary>
+
 ```
 GEO_Download/
 ├── run_download.py            # Entry point — CLI parsing, orchestration, CSV saving
@@ -106,9 +109,14 @@ GEO_Download/
     ├── NIFC/
 ```
 
+</details>
+
 ## Configuration
 
 The application is configured via `config.json`. Each data source is defined under the `sources` key:
+
+<details>
+<summary style="font-size: 1.1em"><i>Click to expand</i></summary>
 
 ```json
 {
@@ -188,6 +196,8 @@ The application is configured via `config.json`. Each data source is defined und
   }
 }
 ```
+
+</details>
 
 | Field                    | Description                                                             |
 |--------------------------|-------------------------------------------------------------------------|
@@ -291,6 +301,8 @@ python run_download.py USGS_Volcano
 ```bash
 python run_download.py NIFC
 ```
+
+```
 ---- GDACS Downloader ----
 
 Source name: GDACS
@@ -390,6 +402,9 @@ Tests cover:
 
 ## Dataflow
 
+<details>
+<summary style="font-size: 1.1em"><i>Click to expand</i></summary>
+
 ```mermaid
 flowchart TD
     A[config.json] -->|load| B[AppConfig]
@@ -437,6 +452,8 @@ flowchart TD
     V7 -->|per day| AH[Save to NIFC]
     H -->|logging| AF[logs/SourceName/download_*.log]
 ```
+
+</details>
 
 ## Extensibility
 
