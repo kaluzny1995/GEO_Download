@@ -1,10 +1,12 @@
-from unittest.mock import patch, MagicMock
 import datetime as dt
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 from downloader.avalanche_org import AvalancheOrgDownloader
 
 
-def _make_feature(danger_level=2, danger="moderate", zone_name="Front Range", center_id="CAIC", state="CO"):
+def _make_feature(danger_level=2, danger="moderate", zone_name="Front Range", center_id="CAIC",
+                  state="CO") -> dict[str, Any]:
     return {
         "type": "Feature",
         "id": 2688,

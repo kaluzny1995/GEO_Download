@@ -6,3 +6,7 @@ dependencies:
   - requests>=2.31.0
   - pydantic>=2.0.0
   - pytest>=7.0.0
+  - pip
+  - pip:
+      - ruff>=0.6
+      - tox>=4.0

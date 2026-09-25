@@ -1,15 +1,16 @@
 from __future__ import annotations
-from typing import Dict, Type
+
+from typing import ClassVar
 
 from model.e_source_type import ESourceType
 
 
 class DownloaderFactory:
     """ Factory for creating downloaders based on source type """
-    _registry: Dict[ESourceType, Type] = {}
+    _registry: ClassVar[dict[ESourceType, type]] = {}
 
     @classmethod
-    def register(cls, source_type: ESourceType, downloader_class: Type) -> None:
+    def register(cls, source_type: ESourceType, downloader_class: type) -> None:
         """ Registers a downloader class for a source type """
         cls._registry[source_type] = downloader_class
 

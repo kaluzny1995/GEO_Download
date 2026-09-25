@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import datetime as dt
 
 from downloader.base import BaseDownloader
@@ -51,19 +52,21 @@ class EONETDownloader(BaseDownloader):
         Returns ("", "") if coordinates cannot be extracted.
         """
         coords = geom.get("coordinates")
-        if not coords:
-            return ("", "")
+        if not isinstance(coords, list) or not coords:
+            return "", ""
 
         geom_type = geom.get("type", "")
 
-        if geom_type == "Polygon" and coords and coords[0]:
+        if geom_type == "Polygon" and coords[0]:
             point = coords[0][0]
-            return (point[1], point[0]) if len(point) > 1 else ("", "")
+            if len(point) > 1:
+                return point[1], point[0]
+            return "", ""
 
-        if isinstance(coords, list) and len(coords) >= 2:
-            return (coords[1], coords[0])
+        if len(coords) >= 2:
+            return coords[1], coords[0]
 
-        return ("", "")
+        return "", ""
 
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Download natural events from NASA EONET for the given date range.

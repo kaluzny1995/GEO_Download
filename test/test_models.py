@@ -1,8 +1,9 @@
-import json
-import pytest
 import datetime as dt
+import json
 
-from model import AppConfig, SourceConfig, LoadParams, ELoadType
+import pytest
+
+from model import AppConfig, ELoadType, LoadParams, SourceConfig
 
 
 def test_source_config_creation():

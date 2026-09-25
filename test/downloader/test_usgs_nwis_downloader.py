@@ -1,12 +1,12 @@
 import datetime as dt
-from unittest.mock import patch, MagicMock
+from typing import Any
+from unittest.mock import patch
 
+from downloader.base import BaseDownloader
 from downloader.usgs_nwis import USGSNWISDownloader
-
 from test.downloader.conftest import MockLogger
 
-
-SAMPLE_API_RESPONSE = {
+SAMPLE_API_RESPONSE: dict[str, Any] = {
     "value": {
         "timeSeries": [
             {
@@ -99,7 +99,7 @@ def test_download_by_date_range():
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
-    with patch.object(downloader, "_get_json", return_value=SAMPLE_API_RESPONSE):
+    with patch.object(BaseDownloader, "_get_json", return_value=SAMPLE_API_RESPONSE):
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
@@ -121,7 +121,7 @@ def test_download_by_date_range_empty():
     downloader = _create_downloader(logger)
 
     empty_response = {"value": {"timeSeries": []}}
-    with patch.object(downloader, "_get_json", return_value=empty_response):
+    with patch.object(BaseDownloader, "_get_json", return_value=empty_response):
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
@@ -135,7 +135,7 @@ def test_download_by_date_range_no_data():
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
-    with patch.object(downloader, "_get_json", return_value=None):
+    with patch.object(BaseDownloader, "_get_json", return_value=None):
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),

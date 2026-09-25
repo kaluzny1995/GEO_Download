@@ -1,6 +1,8 @@
 from __future__ import annotations
-import logging
+
 import datetime as dt
+import logging
+from typing import Any
 
 from downloader.base import BaseDownloader
 
@@ -30,7 +32,8 @@ class USGSNWISDownloader(BaseDownloader):
         ]
         return f"{base_url}?{'&'.join(params)}"
 
-    def _build_record(self, time_series: dict, value_entry: dict, site_info: dict) -> dict:
+    @staticmethod
+    def _build_record(time_series: dict, value_entry: dict, site_info: dict[str, Any]) -> dict:
         """Extract a flat record dict from a time series value."""
         site_code = site_info.get("siteCode", [{}])[0].get("value", "")
         site_name = site_info.get("siteName", "")

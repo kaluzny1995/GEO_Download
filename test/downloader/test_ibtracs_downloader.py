@@ -1,12 +1,10 @@
 import datetime as dt
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import requests.exceptions
 
 from downloader.ibtracs import IBTrACSDownloader
-
 from test.downloader.conftest import MockLogger
-
 
 SAMPLE_CSV = (
     "SEASON,BASIN,SUBBASIN,ISO_TIME,NATURE,LAT,LON,WMO_WIND,WMO_PRES,DIST2LAND,LANDFALL\n"
@@ -182,3 +180,4 @@ def test_download_by_date_range_custom_dataset():
 
     called_url = mock_get.call_args[0][0]
     assert "ibtracs.all.list.v04r01.csv" in called_url
+    assert len(result) == 3

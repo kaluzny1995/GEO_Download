@@ -1,13 +1,13 @@
-import os
-import csv
-import logging
 import argparse
+import csv
 import datetime as dt
+import logging
+import os
 
-import util
-from model import AppConfig, SourceConfig, LoadParams
-from downloader_factory import get_downloader
 import downloader  # noqa: F401 - triggers downloader registrations
+import util
+from downloader_factory import get_downloader
+from model import AppConfig, LoadParams, SourceConfig
 
 
 def parse_args(config: AppConfig) -> argparse.Namespace:
@@ -107,7 +107,7 @@ def main():
     create_folders(source)
 
     # Initialize downloader based on source type
-    downloader = get_downloader(source.type, logger=logger, **source.params)
+    dl = get_downloader(source.type, logger=logger, **source.params)
 
     # Download data for each day in the date range
     for date in util.date_range(load_params.date_from, load_params.date_to):
@@ -116,7 +116,7 @@ def main():
 
         # Download data for the specific day
         next_date = date + dt.timedelta(days=1)
-        data = downloader.download_by_date_range(source.api_url, date, next_date)
+        data = dl.download_by_date_range(source.api_url, date, next_date)
 
         # Save to CSV
         save_csv(data, source.output_folder, source.output_file_pattern, date, logger=logger)

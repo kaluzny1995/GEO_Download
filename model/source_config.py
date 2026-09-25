@@ -1,5 +1,6 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import Dict, Any
 
 
 class SourceConfig(BaseModel):
@@ -12,7 +13,7 @@ class SourceConfig(BaseModel):
     output_folder: str
     output_file_pattern: str
     is_date_to_previous_day: bool = True
-    params: Dict[str, Any] = {}
+    params: dict[str, Any] = {}
 
     class ConfigDict:
         frozen = True

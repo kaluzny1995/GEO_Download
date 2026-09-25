@@ -1,10 +1,9 @@
 import datetime as dt
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import requests.exceptions
 
 from downloader.usgs_earthquake import USGSEarthquakeDownloader
-
 from test.downloader.conftest import MockLogger
 
 

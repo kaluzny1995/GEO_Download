@@ -1,8 +1,9 @@
 from __future__ import annotations
+
 import csv
+import datetime as dt
 import io
 import logging
-import datetime as dt
 
 import requests
 
@@ -89,7 +90,7 @@ class IBTrACSDownloader(BaseDownloader):
                 record_date = iso_time[:10]
                 if start_str <= record_date < end_str:
                     # Only now build the full dict
-                    row_dict = dict(zip(header, fields))
+                    row_dict = dict(zip(header, fields, strict=False))
                     filtered.append(row_dict)
                     kept_count += 1
 

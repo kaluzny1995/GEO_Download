@@ -1,10 +1,9 @@
 import datetime as dt
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
+from downloader.base import BaseDownloader
 from downloader.eonet import EONETDownloader
-
 from test.downloader.conftest import MockLogger
-
 
 SAMPLE_EVENTS = [
     {
@@ -15,8 +14,20 @@ SAMPLE_EVENTS = [
         "categories": [{"id": "severeStorms", "title": "Severe Storms"}],
         "sources": [{"id": "JTWC", "url": "https://example.com/jtwc"}],
         "geometry": [
-            {"magnitudeValue": 35.0, "magnitudeUnit": "kts", "date": "2026-09-10T06:00:00Z", "type": "Point", "coordinates": [-117.3, 16.4]},
-            {"magnitudeValue": 55.0, "magnitudeUnit": "kts", "date": "2026-09-11T12:00:00Z", "type": "Point", "coordinates": [-124.1, 16.6]},
+            {
+                "magnitudeValue": 35.0,
+                "magnitudeUnit": "kts",
+                "date": "2026-09-10T06:00:00Z",
+                "type": "Point",
+                "coordinates": [-117.3, 16.4],
+            },
+            {
+                "magnitudeValue": 55.0,
+                "magnitudeUnit": "kts",
+                "date": "2026-09-11T12:00:00Z",
+                "type": "Point",
+                "coordinates": [-124.1, 16.6],
+            },
         ],
     },
     {
@@ -27,7 +38,13 @@ SAMPLE_EVENTS = [
         "categories": [{"id": "wildfires", "title": "Wildfires"}],
         "sources": [{"id": "IRWIN", "url": "https://example.com/irwin"}],
         "geometry": [
-            {"magnitudeValue": 914.0, "magnitudeUnit": "acres", "date": "2026-09-08T16:57:00Z", "type": "Point", "coordinates": [-98.678, 34.841]},
+            {
+                "magnitudeValue": 914.0,
+                "magnitudeUnit": "acres",
+                "date": "2026-09-08T16:57:00Z",
+                "type": "Point",
+                "coordinates": [-98.678, 34.841],
+            },
         ],
     },
     {
@@ -38,7 +55,13 @@ SAMPLE_EVENTS = [
         "categories": [{"id": "floods", "title": "Floods"}],
         "sources": [{"id": "GDACS", "url": "https://example.com/gdacs"}],
         "geometry": [
-            {"magnitudeValue": None, "magnitudeUnit": None, "date": "2026-09-11T20:00:00Z", "type": "Polygon", "coordinates": [[[22.53, 92.62], [22.52, 92.62]]]},
+            {
+                "magnitudeValue": None,
+                "magnitudeUnit": None,
+                "date": "2026-09-11T20:00:00Z",
+                "type": "Polygon",
+                "coordinates": [[[22.53, 92.62], [22.52, 92.62]]],
+            },
         ],
     },
 ]
@@ -103,7 +126,7 @@ def test_download_by_date_range():
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
-    with patch.object(EONETDownloader, "_get_json", return_value={"events": SAMPLE_EVENTS}):
+    with patch.object(BaseDownloader, "_get_json", return_value={"events": SAMPLE_EVENTS}):
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 10),
@@ -121,7 +144,7 @@ def test_download_by_date_range_empty():
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
-    with patch.object(EONETDownloader, "_get_json", return_value={"events": []}):
+    with patch.object(BaseDownloader, "_get_json", return_value={"events": []}):
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
@@ -135,7 +158,7 @@ def test_download_by_date_range_no_data():
     logger = MockLogger()
     downloader = _create_downloader(logger)
 
-    with patch.object(EONETDownloader, "_get_json", return_value=None):
+    with patch.object(BaseDownloader, "_get_json", return_value=None):
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),

@@ -1,15 +1,16 @@
 from __future__ import annotations
+
 import abc
 import csv
+import datetime as dt
 import io
 import logging
-import datetime as dt
 from collections.abc import Callable
 
 import requests
+from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from urllib3.util.retry import Retry
-from requests.adapters import HTTPAdapter
 
 from util import setup_logger
 
@@ -63,14 +64,14 @@ class BaseDownloader(abc.ABC):
         """Format datetime as YYYY-MM-DD HH:MM:SS string."""
         return date.strftime("%Y-%m-%d %H:%M:%S")
 
-    def _validate_dict_response(self, data: dict | None, source_name: str) -> dict | None:
+    def _validate_dict_response(self, data: list | dict | None, source_name: str) -> dict | None:
         """Validate API response is a non-empty dict. Returns None if invalid."""
         if not data or not isinstance(data, dict):
             self.logger.warning(f"No data received from {source_name} API")
             return None
         return data
 
-    def _validate_list_response(self, data: list | None, source_name: str) -> list | None:
+    def _validate_list_response(self, data: list | dict | None, source_name: str) -> list | None:
         """Validate API response is a non-empty list. Returns None if invalid."""
         if not data or not isinstance(data, list):
             self.logger.warning(f"No data received from {source_name} API")
@@ -105,7 +106,6 @@ class BaseDownloader(abc.ABC):
         into memory at once.
         """
         self.logger.info(f"Downloading CSV from: {url}")
-        response = None
         try:
             response = self.session.get(url, timeout=self.timeout, stream=True)
             response.raise_for_status()

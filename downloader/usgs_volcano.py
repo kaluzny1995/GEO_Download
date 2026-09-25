@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import datetime as dt
 
 from downloader.base import BaseDownloader
@@ -16,7 +17,8 @@ class USGSVolcanoDownloader(BaseDownloader):
     Northern Mariana Islands (NMI), and Yellowstone (YVO).
     """
 
-    def _build_record(self, volcano: dict) -> dict:
+    @staticmethod
+    def _build_record(volcano: dict) -> dict:
         """Extract a flat record dict from a volcano status entry."""
         return {
             "volcano_name": volcano.get("volcano_name", ""),

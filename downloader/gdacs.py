@@ -1,6 +1,7 @@
 from __future__ import annotations
-import logging
+
 import datetime as dt
+import logging
 
 from downloader.base import BaseDownloader
 
@@ -21,7 +22,8 @@ class GDACSDownloader(BaseDownloader):
         self._event_types = event_types
         self._page_size = page_size
 
-    def _build_record(self, feature: dict) -> dict:
+    @staticmethod
+    def _build_record(feature: dict) -> dict:
         """Extract a flat record dict from a GeoJSON feature."""
         props = feature.get("properties", {})
         geom = feature.get("geometry", {})
@@ -48,7 +50,7 @@ class GDACSDownloader(BaseDownloader):
             "is_current": props.get("iscurrent", ""),
         }
 
-    def _fetch_page(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime, page: int) -> list[dict]:  # noqa: E501
+    def _fetch_page(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime, page: int) -> list[dict]:
         """Fetch a single page of GDACS events."""
         params = (
             f"?eventlist={self._event_types}"

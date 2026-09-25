@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import datetime as dt
 
 from downloader.base import BaseDownloader
@@ -11,7 +12,8 @@ class NIFCDownloader(BaseDownloader):
     to get current interagency fire perimeters for the United States.
     """
 
-    def _build_record(self, feature: dict) -> dict:
+    @staticmethod
+    def _build_record(feature: dict) -> dict:
         """Extract a flat record dict from an ArcGIS feature."""
         attrs = feature.get("attributes", {})
 
@@ -43,7 +45,10 @@ class NIFCDownloader(BaseDownloader):
         """
         self.logger.info(f"Downloading NIFC fire perimeter data for {start_date.date()} to {end_date.date()}")
 
-        where_clause = f"poly_DateCurrent >= TIMESTAMP '{self._format_datetime(start_date)}' AND poly_DateCurrent <= TIMESTAMP '{self._format_datetime(end_date)}'"
+        where_clause = (
+            f"poly_DateCurrent >= TIMESTAMP '{self._format_datetime(start_date)}'"
+            f" AND poly_DateCurrent <= TIMESTAMP '{self._format_datetime(end_date)}'"
+        )
 
         params = {
             "where": where_clause,

@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class ESourceType(str, Enum):
+class ESourceType(StrEnum):
     USGS_EARTHQUAKE = "usgs_earthquake"
     GDACS = "gdacs"
     EONET = "eonet"

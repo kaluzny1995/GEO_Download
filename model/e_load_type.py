@@ -1,6 +1,6 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class ELoadType(str, Enum):
+class ELoadType(StrEnum):
     HISTORICAL = "HISTORICAL"
     INCREMENTAL = "INCREMENTAL"

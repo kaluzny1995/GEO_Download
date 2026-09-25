@@ -1,7 +1,8 @@
 from __future__ import annotations
-import logging
+
 import datetime as dt
 import json
+import logging
 from pathlib import Path
 
 from downloader.base import BaseDownloader
@@ -25,7 +26,7 @@ class OpenMeteoFloodDownloader(BaseDownloader):
 
     def _load_rivers(self) -> list[dict]:
         """Load river definitions from JSON file."""
-        with open(self._rivers_file, "r") as f:
+        with open(self._rivers_file) as f:
             return json.load(f)
 
     def _query_river(self, base_url: str, river: dict, start_date: dt.datetime, end_date: dt.datetime) -> dict | None:
@@ -41,14 +42,15 @@ class OpenMeteoFloodDownloader(BaseDownloader):
         result = self._get_json(url)
         return result if isinstance(result, dict) else None
 
-    def _build_records(self, river: dict, data: dict, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
+    @staticmethod
+    def _build_records(river: dict, data: dict) -> list[dict]:
         """Build flat records from API response for one river."""
         daily = data.get("daily", {})
         times = daily.get("time", [])
         discharges = daily.get("river_discharge", [])
 
         records = []
-        for date_str, discharge in zip(times, discharges):
+        for date_str, discharge in zip(times, discharges, strict=False):
             if discharge is None:
                 continue
             records.append({
@@ -75,7 +77,7 @@ class OpenMeteoFloodDownloader(BaseDownloader):
         for i, river in enumerate(self._rivers, 1):
             data = self._query_river(base_url, river, start_date, end_date)
             if data and isinstance(data, dict):
-                records = self._build_records(river, data, start_date, end_date)
+                records = self._build_records(river, data)
                 if records:
                     all_records.extend(records)
                     rivers_with_data += 1
@@ -83,5 +85,7 @@ class OpenMeteoFloodDownloader(BaseDownloader):
             if i % 20 == 0:
                 self.logger.info(f"  Progress: {i}/{len(self._rivers)} rivers queried")
 
-        self.logger.info(f"Downloaded {len(all_records)} discharge records from {rivers_with_data}/{len(self._rivers)} rivers")
+        self.logger.info(
+            f"Downloaded {len(all_records)} discharge records from {rivers_with_data}/{len(self._rivers)} rivers"
+        )
         return all_records

@@ -4,3 +4,7 @@ __pycache__/
 .env
 /data/
 /logs/
+.tox/
+.ruff_cache/
+.pytest_cache/
+

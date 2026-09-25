@@ -1,10 +1,9 @@
 import datetime as dt
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import requests.exceptions
 
 from downloader.nifc import NIFCDownloader
-
 from test.downloader.conftest import MockLogger
 
 TEST_BASE_URL = "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query"

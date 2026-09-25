@@ -1,13 +1,13 @@
 import json
+
 from pydantic import BaseModel
-from typing import Dict
 
 from model.source_config import SourceConfig
 
 
 class AppConfig(BaseModel):
     """ App config class """
-    sources: Dict[str, SourceConfig]
+    sources: dict[str, SourceConfig]
 
     class ConfigDict:
         frozen = True

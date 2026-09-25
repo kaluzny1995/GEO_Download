@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import datetime as dt
 
 from downloader.base import BaseDownloader
@@ -11,7 +12,8 @@ class AvalancheOrgDownloader(BaseDownloader):
     Returns daily danger ratings (1-5 scale) with zone metadata.
     """
 
-    def _build_record(self, feature: dict) -> dict:
+    @staticmethod
+    def _build_record(feature: dict) -> dict:
         """Extract a flat record dict from a GeoJSON feature."""
         props = feature.get("properties", {})
         warning = props.get("warning", {}) or {}

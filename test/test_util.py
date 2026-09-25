@@ -1,6 +1,6 @@
-import pytest
 import datetime as dt
-from typing import List
+
+import pytest
 
 import util
 
@@ -22,14 +22,14 @@ import util
     ]),
 ])
 def test_date_range(start_date: dt.datetime, end_date: dt.datetime,
-                    expected_dates: List[dt.datetime]) -> None:
+                    expected_dates: list[dt.datetime]) -> None:
     # Arrange
     # Act
     dates = list(util.date_range(start_date, end_date))
 
     # Assert
     assert len(dates) == len(expected_dates)
-    for date, expected_date in zip(dates, expected_dates):
+    for date, expected_date in zip(dates, expected_dates, strict=True):
         assert date == expected_date
 
 

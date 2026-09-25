@@ -1,20 +1,20 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests.exceptions
 
 from downloader.base import BaseDownloader
-from downloader.usgs_earthquake import USGSEarthquakeDownloader
-from downloader.gdacs import GDACSDownloader
 from downloader.eonet import EONETDownloader
+from downloader.gdacs import GDACSDownloader
 from downloader.openmeteo_flood import OpenMeteoFloodDownloader
+from downloader.usgs_earthquake import USGSEarthquakeDownloader
 from downloader.usgs_nwis import USGSNWISDownloader
-
 from test.downloader.conftest import MockLogger
 
 
 def test_cannot_instantiate_base_directly():
     with pytest.raises(TypeError):
+        # noinspection PyAbstractClass
         BaseDownloader(logger=MockLogger())
 
 

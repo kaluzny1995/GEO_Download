@@ -2,12 +2,11 @@ import datetime as dt
 import json
 import os
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
+from downloader.base import BaseDownloader
 from downloader.openmeteo_flood import OpenMeteoFloodDownloader
-
 from test.downloader.conftest import MockLogger
-
 
 SAMPLE_RIVERS = [
     {"name": "Danube", "country": "Romania", "latitude": 44.42, "longitude": 28.63},
@@ -72,8 +71,6 @@ def test_build_records():
     records = downloader._build_records(
         SAMPLE_RIVERS[0],
         SAMPLE_API_RESPONSE,
-        dt.datetime(2026, 9, 1),
-        dt.datetime(2026, 9, 3),
     )
 
     # Assert
@@ -96,8 +93,6 @@ def test_build_records_skips_null():
     records = downloader._build_records(
         SAMPLE_RIVERS[2],
         SAMPLE_API_RESPONSE_WITH_NULL,
-        dt.datetime(2026, 9, 1),
-        dt.datetime(2026, 9, 2),
     )
 
     # Assert
@@ -114,8 +109,6 @@ def test_build_records_empty():
     records = downloader._build_records(
         SAMPLE_RIVERS[0],
         SAMPLE_API_RESPONSE_EMPTY,
-        dt.datetime(2026, 9, 1),
-        dt.datetime(2026, 9, 3),
     )
 
     # Assert
@@ -130,13 +123,13 @@ def test_download_by_date_range():
     responses = [SAMPLE_API_RESPONSE, SAMPLE_API_RESPONSE, SAMPLE_API_RESPONSE_WITH_NULL]
     call_count = 0
 
-    def mock_get_json(url):
+    def mock_get_json(_url):
         nonlocal call_count
-        result = responses[call_count] if call_count < len(responses) else None
+        resp = responses[call_count] if call_count < len(responses) else None
         call_count += 1
-        return result
+        return resp
 
-    with patch.object(OpenMeteoFloodDownloader, "_get_json", side_effect=mock_get_json):
+    with patch.object(BaseDownloader, "_get_json", side_effect=mock_get_json):
         # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
@@ -163,7 +156,7 @@ def test_download_by_date_range_all_null():
         "daily": {"time": ["2026-09-01"], "river_discharge": [None]},
     }
 
-    with patch.object(OpenMeteoFloodDownloader, "_get_json", return_value=null_response):
+    with patch.object(BaseDownloader, "_get_json", return_value=null_response):
         # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
@@ -180,7 +173,7 @@ def test_download_by_date_range_api_error():
     logger = MockLogger()
     downloader = _create_downloader(logger=logger)
 
-    with patch.object(OpenMeteoFloodDownloader, "_get_json", return_value=None):
+    with patch.object(BaseDownloader, "_get_json", return_value=None):
         # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",
