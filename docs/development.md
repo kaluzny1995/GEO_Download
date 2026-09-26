@@ -22,7 +22,7 @@ Tests cover:
 - **USGS NWIS downloader** — legacy WaterServices API, time series parsing, site metadata extraction.
 - **IBTrACS downloader** — CSV parsing with units row skip, date filtering, custom dataset selection, error handling.
 - **USGS Volcano downloader** — HANS API response parsing, alert filtering, notice URL construction.
-- **NIFC downloader** — ArcGIS FeatureServer query, polygon geometry parsing, date/time filtering.
+- **NIFC downloader** — ArcGIS FeatureServer query, `outFields`/centroid handling, ArcGIS error-payload detection, date/time filtering.
 
 
 ## Code Quality — Ruff + tox

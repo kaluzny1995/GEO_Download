@@ -280,39 +280,39 @@ _File total: **174 columns** = 19 core + 155 agency._
 ## NIFC (US Wildland Fires)
 
 - **File:** `data/NIFC/nifc_fires_YYYY-MM-DD.csv` · 16 columns
-- **Grain:** one row per fire-perimeter feature updated inside the day · **Provenance:** ArcGIS FeatureServer `attributes` from the WFIGS *Interagency Perimeters* layer (geometry is not requested).
+- **Grain:** one row per fire-perimeter feature updated inside the day · **Provenance:** ArcGIS FeatureServer `attributes` from the WFIGS *Interagency Perimeters* layer — polygon geometry is not requested, but the feature **centroid** is (`returnCentroid=true`), which supplies `latitude`/`longitude`.
 
 | Column | Type / unit | Description |
 |--------|-------------|-------------|
 | `incident_name` | text | Fire / incident name (`poly_IncidentName`) |
 | `irwin_id` | GUID | IRWIN incident identifier, e.g. `{C4138756-…}` |
-| `fire_number` | epoch ms | **Named misleadingly** — it holds the fire discovery date/time (`poly_FireDiscoveryDateTime`) |
-| `acres` | acres | GIS-calculated perimeter size (`poly_GIS Acres`) |
-| `percent_contained` | % | Percent of the fire contained (`poly_PercentContained`) |
-| `fire_type` | code | Fire-type code (`poly_FireType`) |
-| `fire_type_label` | text | Fire-type label (`poly_FireType_LABEL`), e.g. Wildfire / Prescribed Fire |
-| `jurisdiction` | code | Land-management jurisdiction code (`poly_Jurisdiction`) |
-| `jurisdiction_label` | text | Jurisdiction name (`poly_Jurisdiction_LABEL`), e.g. `USFS`, `NPS`, `Private` |
-| `state` | 2-letter code | State code (`poly_State`) |
-| `po_method` | code | Point-of-origin state/method (`poly_POOState`) |
-| `latitude` | degrees | Perimeter latitude (`poly_Latitude`) |
-| `longitude` | degrees | Perimeter longitude (`poly_longitude`) |
+| `fire_number` | epoch ms | **Named misleadingly** — it holds the fire discovery date/time (`attr_FireDiscoveryDateTime`) |
+| `acres` | acres | GIS-calculated perimeter size (`poly_GISAcres`) |
+| `percent_contained` | % | Percent of the fire contained (`attr_PercentContained`) |
+| `fire_type` | code | Incident type category (`attr_IncidentTypeCategory`), e.g. `WF`, `RX`, `CX` |
+| `fire_type_label` | text | Feature category (`poly_FeatureCategory`), e.g. *Wildfire Daily Fire Perimeter*, *Prescribed Fire* |
+| `jurisdiction` | code | Point-of-origin jurisdictional agency (`attr_POOJurisdictionalAgency`), e.g. `USFS`, `BLM`, `NPS`, `BIA` — empty when unset |
+| `jurisdiction_label` | code | Jurisdictional unit beneath that agency (`attr_POOJurisdictionalUnit`), e.g. `WAOWF`, `ORUMF` |
+| `state` | 2-letter code | Point-of-origin state (`attr_POOState`) with the `US-` prefix stripped |
+| `po_method` | code | Point-of-origin state as stored by IRWIN (`attr_POOState`), e.g. `US-CO` |
+| `latitude` | degrees | Perimeter centroid latitude (falls back to `attr_InitialLatitude`) |
+| `longitude` | degrees | Perimeter centroid longitude (falls back to `attr_InitialLongitude`) |
 | `poly_date` | epoch ms | When the perimeter was last current (`poly_DateCurrent`) |
 | `created_on` | epoch ms | Record creation time (`attr_CreatedOnDateTime_dt`) |
 | `modified_on` | epoch ms | Record modification time (`attr_ModifiedOnDateTime_dt`) |
 
-> ⚠ **Known issue — NIFC currently downloads nothing.** 11 of the 16 requested `outFields`
-> no longer exist on the *Perimeters* layer, so ArcGIS answers with an error payload
-> (`{"error":{"code":400,…,"details":["'outFields' parameter is invalid"]}}` — note HTTP 200)
-> and the downloader records 0 rows.
+> ℹ **Layer-specific field names.** On the *Perimeters* layer `poly_*` are perimeter
+> attributes and `attr_*` are incident attributes mirrored onto each perimeter — every
+> name in the request must exist in that schema. ArcGIS rejects an unknown `outFields`
+> list with **HTTP 200** plus `{"error":{"code":400,…,"details":["'outFields' parameter is invalid"]}}`,
+> which reads as "0 records" rather than as a failure. This source silently produced no
+> files from 2026-09-18 until 2026-09-26, when the columns were re-mapped to real field
+> names and the downloader started logging `error` payloads (`NIFC API rejected the query: …`).
+> The layer exposes no human-readable agency name, hence `jurisdiction_label` holds a unit *code*.
 >
-> | Situation | Columns |
-> |-----------|---------|
-> | Requested but **missing on the layer** | `fire_number`, `acres`, `percent_contained`, `fire_type`, `fire_type_label`, `jurisdiction`, `jurisdiction_label`, `state`, `po_method`, `latitude`, `longitude` (11) |
-> | **Always empty** in the files already on disk | the first 9 above — `latitude`/`longitude` are populated there, which means the layer schema changed after those files were written |
-> | **Populated** in the files already on disk | `incident_name`, `irwin_id`, `latitude`, `longitude`, `poly_date`, `created_on`, `modified_on` (7) |
->
-> Fixes: `poly_GIS Acres` → `poly_GISAcres`, and the remaining attributes
-> (`attr_FireDiscoveryDateTime`, `attr_PercentContained`, `attr_POOState`, `attr_InitialLatitude`, …)
-> are on the WFIGS *Incidents* service, not *Perimeters*. `fire_number` also keeps its
-> misleading name — it is meant to carry a discovery date/time.
+> Fields a query must not omit: `poly_IncidentName`, `poly_IRWINID`, `poly_FeatureCategory`,
+> `poly_GISAcres`, `poly_DateCurrent`, `attr_IncidentTypeCategory`, `attr_FireDiscoveryDateTime`,
+> `attr_PercentContained`, `attr_POOJurisdictionalAgency`, `attr_POOJurisdictionalUnit`,
+> `attr_POOState`, `attr_InitialLatitude`, `attr_InitialLongitude`,
+> `attr_CreatedOnDateTime_dt`, `attr_ModifiedOnDateTime_dt` — kept in
+> `NIFCDownloader._OUT_FIELDS` (downloader/nifc.py).
