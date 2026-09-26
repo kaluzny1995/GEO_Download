@@ -7,13 +7,13 @@ from downloader.ibtracs import IBTrACSDownloader
 from test.downloader.conftest import MockLogger
 
 SAMPLE_CSV = (
-    "SEASON,BASIN,SUBBASIN,ISO_TIME,NATURE,LAT,LON,WMO_WIND,WMO_PRES,DIST2LAND,LANDFALL\n"
-    "SEASON,BASIN,SUBBASIN,ISO_TIME,NATURE,LAT,LON,WMO_WIND,WMO_PRES,DIST2LAND,LANDFALL\n"
-    "2026,NA,GM,2026-09-01 06:00:00,TS,25.0,-80.0,35,1005,150,0\n"
-    "2026,NA,GM,2026-09-01 12:00:00,TS,26.0,-81.0,40,1002,100,0\n"
-    "2026,NA,GM,2026-09-02 06:00:00,HU,27.0,-82.0,65,990,50,0\n"
-    "2026,WP,,2026-09-01 18:00:00,TS,15.0,135.0,45,998,200,0\n"
-    "2026,WP,,2026-09-03 00:00:00,HU,16.0,136.0,80,970,500,0\n"
+    "SID,SEASON,NUMBER,BASIN,SUBBASIN,NAME,ISO_TIME,NATURE,LAT,LON,WMO_WIND,WMO_PRES,DIST2LAND,LANDFALL\n"
+    " ,Year, , , , , , , , , , , , \n"
+    "2026001NA01,2026,1,NA,GM,GAMMA,2026-09-01 06:00:00,TS,25.0,-80.0,35,1005,150,0\n"
+    "2026001NA01,2026,1,NA,GM,GAMMA,2026-09-01 12:00:00,TS,26.0,-81.0,40,1002,100,0\n"
+    "2026001NA01,2026,1,NA,GM,GAMMA,2026-09-02 06:00:00,HU,27.0,-82.0,65,990,50,0\n"
+    "2026002WP05,2026,2,WP,,,2026-09-01 18:00:00,TS,15.0,135.0,45,998,200,0\n"
+    "2026002WP05,2026,2,WP,,,2026-09-03 00:00:00,HU,16.0,136.0,80,970,500,0\n"
 )
 
 TEST_BASE_URL = "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv"
@@ -111,8 +111,56 @@ def test_download_by_date_range_skips_units_row():
     with patch.object(downloader.session, "get", return_value=mock_response):
         result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
 
+    assert len(result) == 4
     for record in result:
-        assert record.get("SEASON") != "SEASON"
+        assert record.get("SEASON") != "Year"
+        assert record.get("ISO_TIME") != ""
+
+
+def test_download_by_date_range_resolves_iso_time_by_name():
+    """ISO_TIME must be located by header name, not by a fixed column index."""
+    logger = MockLogger()
+    downloader = IBTrACSDownloader(logger=logger)
+
+    # ISO_TIME deliberately not in the position used by the live IBTrACS file.
+    csv_text = (
+        "SID,ISO_TIME,BASIN,SEASON,NAME\n"
+        " , , ,Year, \n"
+        "2026001NA01,2026-09-01 06:00:00,NA,2026,GAMMA\n"
+        "2026001NA01,2026-09-05 06:00:00,NA,2026,GAMMA\n"
+    )
+    mock_response = MagicMock()
+    mock_response.iter_lines.return_value = _csv_to_bytes(csv_text)
+    mock_response.raise_for_status = MagicMock()
+
+    start_date = dt.datetime(2026, 9, 1)
+    end_date = dt.datetime(2026, 9, 2)
+
+    with patch.object(downloader.session, "get", return_value=mock_response):
+        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
+
+    assert len(result) == 1
+    assert result[0]["ISO_TIME"] == "2026-09-01 06:00:00"
+    assert result[0]["SID"] == "2026001NA01"
+
+
+def test_download_by_date_range_missing_iso_time_column():
+    """A header without ISO_TIME must fail loudly instead of returning nothing silently."""
+    logger = MockLogger()
+    downloader = IBTrACSDownloader(logger=logger)
+
+    mock_response = MagicMock()
+    mock_response.iter_lines.return_value = _csv_to_bytes("SID,SEASON,BASIN\n ,Year,NA\n")
+    mock_response.raise_for_status = MagicMock()
+
+    start_date = dt.datetime(2026, 9, 1)
+    end_date = dt.datetime(2026, 9, 2)
+
+    with patch.object(downloader.session, "get", return_value=mock_response):
+        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
+
+    assert result == []
+    assert any("has no ISO_TIME column" in msg for _, msg in logger.messages)
 
 
 def test_download_by_date_range_http_error():
@@ -152,7 +200,7 @@ def test_download_by_date_range_empty_csv():
     downloader = IBTrACSDownloader(logger=logger)
 
     mock_response = MagicMock()
-    mock_response.iter_lines.return_value = _csv_to_bytes("SEASON,BASIN\nSEASON,BASIN\n")
+    mock_response.iter_lines.return_value = _csv_to_bytes("SID,SEASON,ISO_TIME\n ,Year, \n")
     mock_response.raise_for_status = MagicMock()
 
     start_date = dt.datetime(2026, 9, 1)

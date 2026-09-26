@@ -20,7 +20,7 @@ Tests cover:
 - **EONET downloader** — event parsing (Point/Polygon geometry), closed events, missing geometry, empty/no-data handling.
 - **Open-Meteo Flood downloader** — river discharge queries, null value handling, multi-river aggregation.
 - **USGS NWIS downloader** — legacy WaterServices API, time series parsing, site metadata extraction.
-- **IBTrACS downloader** — CSV parsing with units row skip, date filtering, custom dataset selection, error handling.
+- **IBTrACS downloader** — CSV parsing with units row skip, `ISO_TIME` column resolution by header name (regression: a fixed column index dropped every record), date filtering, custom dataset selection, error handling.
 - **USGS Volcano downloader** — HANS API response parsing, alert filtering, notice URL construction.
 - **NIFC downloader** — ArcGIS FeatureServer query, `outFields`/centroid handling, ArcGIS error-payload detection, date/time filtering.
 
