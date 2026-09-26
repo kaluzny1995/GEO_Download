@@ -100,8 +100,12 @@ def main():
     show_params(source_name, source, load_params, logger=logger)
 
     if load_params.date_from > load_params.date_to:
-        logger.info("Recent file date is bigger than end date. Nothing to download. Finishing.")
-        raise Exception("Recent file date is bigger than end date. Nothing to download.")
+        message = "Recent file date is bigger than end date. Nothing to download."
+        print(message)
+        logger.info(message)
+        print("\nDone.")
+        logger.info("Done.")
+        return
 
     # Create folders if not exist
     create_folders(source)
