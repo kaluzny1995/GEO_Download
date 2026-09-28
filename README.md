@@ -34,6 +34,7 @@ The architecture is extensible: new data sources can be added by implementing a 
 - **Factory/Registry pattern** — new data sources are added via self-registering downloader classes.
 - **Frozen Pydantic models** — all configuration and parameter objects are immutable.
 - **Structured logging** — each run produces a timestamped log file under `logs/<SourceName>/`.
+- **Fails on an empty run** — a run exits `0` only when at least one CSV was written (or the local data is already current); a run that requested days but saved nothing raises `RuntimeError` (traceback, exit code `1`), so a chained pipeline (GEO_E2E) stops instead of ingesting stale files.
 - **CLI interface** — source selection via command-line arguments.
 
 ## Tech Stack

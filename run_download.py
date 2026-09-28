@@ -3,9 +3,11 @@ import csv
 import datetime as dt
 import logging
 import os
+import sys
 
 import downloader  # noqa: F401 - triggers downloader registrations
 import util
+from downloader.base import BaseDownloader
 from downloader_factory import get_downloader
 from model import AppConfig, LoadParams, SourceConfig
 
@@ -49,15 +51,15 @@ def show_params(source_name: str, source: SourceConfig, load_params: LoadParams,
 
 
 def save_csv(data: list[dict], output_folder: str, output_file_pattern: str,
-             date: dt.datetime, logger: logging.Logger) -> str:
-    """ Saves data to CSV file """
+             date: dt.datetime, logger: logging.Logger) -> bool:
+    """ Saves data to CSV file. Returns True only when a file was actually written. """
     output_file = output_file_pattern.format(date=date.strftime("%Y-%m-%d"))
     output_path = f"{output_folder}/{output_file}"
 
     if not data:
         logger.warning(f"No data to save for {date.strftime('%Y-%m-%d')}.")
         print(f"No data to save for {date.strftime('%Y-%m-%d')}.")
-        return output_path
+        return False
 
     fieldnames = data[0].keys()
 
@@ -71,11 +73,45 @@ def save_csv(data: list[dict], output_folder: str, output_file_pattern: str,
     except Exception as e:
         logger.error(f"Error saving CSV: {e}")
         print(f"Error saving CSV: {e}")
+        return False
 
-    return output_path
+    return True
 
 
-def main():
+def download_source(source: SourceConfig, source_name: str, load_params: LoadParams,
+                    dl: BaseDownloader, logger: logging.Logger) -> None:
+    """ Downloads every day of the load range and saves it as CSV.
+
+    Raises RuntimeError when the run produced no files at all (nothing to
+    ingest) — the process then ends with exit code 1, which stops the chain
+    in GEO_E2E so INGESTION/DATA_QUALITY are skipped.
+    """
+    saved_files = 0
+
+    for date in util.date_range(load_params.date_from, load_params.date_to):
+        print(f"Downloading data for {date.strftime('%Y-%m-%d')}.")
+        logger.info(f"Downloading data for {date.strftime('%Y-%m-%d')}.")
+
+        # Download data for the specific day
+        next_date = date + dt.timedelta(days=1)
+        data = dl.download_by_date_range(source.api_url, date, next_date)
+
+        # Save to CSV
+        if save_csv(data, source.output_folder, source.output_file_pattern, date, logger=logger):
+            saved_files += 1
+
+    if saved_files == 0:
+        message = (f"No files downloaded for {source_name} in "
+                   f"{load_params.date_from.strftime('%Y-%m-%d')}..{load_params.date_to.strftime('%Y-%m-%d')} — "
+                   "nothing to ingest.")
+        logger.error(message)
+        raise Exception(message)
+
+    print("\nDone.")
+    logger.info("Done.")
+
+
+def main() -> int:
     # Load config
     config = AppConfig.from_json()
 
@@ -105,7 +141,7 @@ def main():
         logger.info(message)
         print("\nDone.")
         logger.info("Done.")
-        return
+        return 0
 
     # Create folders if not exist
     create_folders(source)
@@ -113,21 +149,10 @@ def main():
     # Initialize downloader based on source type
     dl = get_downloader(source.type, logger=logger, **source.params)
 
-    # Download data for each day in the date range
-    for date in util.date_range(load_params.date_from, load_params.date_to):
-        print(f"Downloading data for {date.strftime('%Y-%m-%d')}.")
-        logger.info(f"Downloading data for {date.strftime('%Y-%m-%d')}.")
-
-        # Download data for the specific day
-        next_date = date + dt.timedelta(days=1)
-        data = dl.download_by_date_range(source.api_url, date, next_date)
-
-        # Save to CSV
-        save_csv(data, source.output_folder, source.output_file_pattern, date, logger=logger)
-
-    print("\nDone.")
-    logger.info("Done.")
+    # Download data for each day in the date range (raises when nothing was written)
+    download_source(source, source_name, load_params, dl, logger)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

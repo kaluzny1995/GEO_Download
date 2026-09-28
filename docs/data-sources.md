@@ -13,7 +13,7 @@ Conventions shared by every source:
 | **Empty cell** | The value was missing or `null` in the API response. Nothing is ever written as `null`. |
 | **Date / time** | ISO-8601 exactly as the source returns it (UTC unless the table says otherwise). |
 | **Row grain** | One row per event / observation / river-day belonging to that file's date. |
-| **No data** | If a source returns nothing for a day, no file is written for that day. |
+| **No data** | If a source returns nothing for a day, no file is written for that day. A run in which **every** requested day is empty saves no files at all and raises `RuntimeError` (`No files downloaded for <Source>`), ending the process with exit code `1`, so chained steps (ingestion) are not executed. |
 
 ## USGS Earthquake
 

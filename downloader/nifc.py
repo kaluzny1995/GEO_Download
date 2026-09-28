@@ -75,7 +75,7 @@ class NIFCDownloader(BaseDownloader):
             "fire_type_label": _attr(attrs, "poly_FeatureCategory"),
             "jurisdiction": _attr(attrs, "attr_POOJurisdictionalAgency"),
             "jurisdiction_label": _attr(attrs, "attr_POOJurisdictionalUnit"),
-            "state": _state_code(poo_state) if poo_state else "",
+            "state": _state_code(str(poo_state)) if poo_state else "",
             "po_method": poo_state,
             "latitude": latitude,
             "longitude": longitude,
