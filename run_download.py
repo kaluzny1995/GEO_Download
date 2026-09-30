@@ -105,7 +105,7 @@ def download_source(source: SourceConfig, source_name: str, load_params: LoadPar
                    f"{load_params.date_from.strftime('%Y-%m-%d')}..{load_params.date_to.strftime('%Y-%m-%d')} — "
                    "nothing to ingest.")
         logger.error(message)
-        raise Exception(message)
+        raise RuntimeError(message)
 
     print("\nDone.")
     logger.info("Done.")

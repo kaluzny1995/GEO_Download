@@ -6,17 +6,19 @@ GIS Data Downloader — a Python 3.11 application for programmatically downloadi
 
 GEO_Download fetches data from public geospatial APIs and saves it locally as dated CSV files. Currently supported sources:
 
-| Source | API | Data |
-|--------|-----|------|
-| USGS Earthquake | [FDSN Event Query](https://earthquake.usgs.gov/fdsnws/event/1/query) | Seismic events (lat/lon, depth, magnitude, place) |
-| GDACS | [GDACS REST API](https://www.gdacs.org/gdacsapi/swagger/index.html) | Global disasters — earthquakes, cyclones, floods, volcanoes, wildfires, droughts (country, alert level, severity) |
-| NASA EONET | [EONET API v3](https://eonet.gsfc.nasa.gov/api/v3/) | Natural events — wildfires, storms, floods, volcanoes, earthquakes, drought, landslides, sea ice, temperature extremes (lat/lon, time-series tracks, magnitude) |
-| Open-Meteo Flood | [Flood API](https://open-meteo.com/en/docs/flood-api) | Daily river discharge (m³/s) for 126 major world rivers (GloFAS model, historical from 1984 + 30-day forecast) |
-| USGS NWIS | [WaterServices API](https://waterservices.usgs.gov/nwis/dv/) | Daily streamflow (ft³/s) from USGS stream gauges (site-specific, US only, decades of history) |
-| Avalanche.org | [Avalanche.org API](https://api.avalanche.org/v2/public/products/map-layer) | Daily avalanche danger ratings (1-5) for 82+ forecast zones of 28 US avalanche centers (zone, center, travel advice) |
-| IBTrACS | [NOAA IBTrACS](https://www.ncei.noaa.gov/products/international-best-track-archive) | Global tropical cyclone best-track data — storm position, wind speed, pressure, landfall info (all ocean basins, 1842-present) |
-| USGS Volcano | [HANS API](https://volcanoes.usgs.gov/hans-public/api/volcano) | US volcano alert status — elevated alerts (ADVISORY/WATCH/WARNING) with observatory info and notice links |
-| NIFC | [WFIGS ArcGIS](https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer) | US wildland fire perimeters — incident name, location, acres, containment, jurisdiction |
+| Source | Region coverage | Disaster types | API | Data |
+|--------|-----------------|----------------|-----|------|
+| USGS Earthquake | Global | Earthquakes (also quarry blasts, explosions) | [FDSN Event Query](https://earthquake.usgs.gov/fdsnws/event/1/query) | Seismic events (lat/lon, depth, magnitude, place) |
+| GDACS | Global | Earthquakes (incl. tsunamis) · tropical cyclones · floods · volcanic eruptions · wildfires · droughts | [GDACS REST API](https://www.gdacs.org/gdacsapi/swagger/index.html) | Disaster events (country, alert level, severity, from/to dates) |
+| NASA EONET | Global | Wildfires · severe storms · floods · volcanoes · earthquakes · droughts · landslides · sea & lake ice · temperature extremes | [EONET API v3](https://eonet.gsfc.nasa.gov/api/v3/) | Natural events (lat/lon, time-series tracks, magnitude, closed flag) |
+| Open-Meteo Flood | Global — 126 major rivers | River floods (modelled discharge, forecast + historical) | [Flood API](https://open-meteo.com/en/docs/flood-api) | Daily river discharge (m³/s) for 126 major world rivers (GloFAS model, historical from 1984 + 30-day forecast) |
+| USGS NWIS | United States — 1 gauge configured (Potomac R. near Washington, DC) | — (daily streamflow; flood & drought context) | [WaterServices API](https://waterservices.usgs.gov/nwis/dv/) | Daily streamflow (ft³/s) from USGS stream gauges (site-specific, US only, decades of history) |
+| Avalanche.org | United States — 28 centers / 82+ zones | Avalanches (danger ratings 1-5) | [Avalanche.org API](https://api.avalanche.org/v2/public/products/map-layer) | Daily avalanche danger ratings (1-5) for 82+ forecast zones of 28 US avalanche centers (zone, center, travel advice) |
+| IBTrACS | Global — all ocean basins | Tropical cyclones (hurricanes / typhoons) | [NOAA IBTrACS](https://www.ncei.noaa.gov/products/international-best-track-archive) | Global tropical cyclone best-track data — storm position, wind speed, pressure, landfall info (all ocean basins, 1842-present) |
+| USGS Volcano | United States & territories — AK, HI, CNMI, CA, Cascades, Yellowstone observatories | Volcanic eruptions & unrest (alert notices) | [HANS API](https://volcanoes.usgs.gov/hans-public/api/volcano) | US volcano alert status — elevated alerts (ADVISORY/WATCH/WARNING) with observatory info and notice links |
+| NIFC | United States — CONUS, Alaska & Puerto Rico | Wildfires (incl. prescribed fires) | [WFIGS ArcGIS](https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer) | US wildland fire perimeters — incident name, location, acres, containment, jurisdiction |
+
+**Region coverage** — the geographic footprint of the rows that end up in `data/`. It is set by the provider's mandate (global vs US-only) and, where applicable, narrowed by `config.json`: USGS NWIS downloads just the gauges listed in `sites` (one site by default), while USGS Earthquake, GDACS, EONET, Open-Meteo Flood and IBTrACS carry worldwide records.
 
 All sources support two loading modes:
 
