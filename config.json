@@ -67,7 +67,9 @@
       "output_folder": "data/Avalanche_ORG",
       "output_file_pattern": "avalancheorg_avalanche_{date}.csv",
       "is_date_to_previous_day": true,
-      "params": {}
+      "params": {
+        "notices_file": "data/avalanche_org_notices.csv"
+      }
     },
     "IBTrACS": {
       "type": "ibtracs",

@@ -1,6 +1,10 @@
+import csv
 import datetime as dt
+import os
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from downloader.avalanche_org import AvalancheOrgDownloader
 
@@ -47,6 +51,8 @@ def test_build_record():
     assert record["danger_level"] == 2
     assert record["danger_rating"] == "moderate"
     assert record["off_season"] is False
+    assert record["latitude"] == pytest.approx(39.6)
+    assert record["longitude"] == pytest.approx(-105.4)
 
 
 def test_build_record_no_warning():
@@ -72,6 +78,17 @@ def test_build_record_empty_properties():
     assert record["zone_name"] == ""
     assert record["danger_level"] == ""
     assert record["warning"] == ""
+    assert record["latitude"] == ""
+    assert record["longitude"] == ""
+
+
+def test_build_record_without_geometry_has_empty_centroid():
+    dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
+    feature = _make_feature()
+    feature["geometry"] = None
+    record = dl._build_record(feature)
+    assert record["latitude"] == ""
+    assert record["longitude"] == ""
 
 
 @patch("downloader.base.BaseDownloader._get_json")
@@ -128,3 +145,83 @@ def test_download_multiple_days(mock_get_json):
     assert len(records) == 2
     assert records[0]["date"] == "2026-09-14"
     assert records[1]["date"] == "2026-09-15"
+
+
+def test_default_notices_file_points_next_to_rivers_json():
+    dl = AvalancheOrgDownloader(logger=MagicMock())
+    assert dl.notices_file == AvalancheOrgDownloader.DEFAULT_NOTICES_FILE
+    assert dl.notices_file.endswith(os.path.join("data", "avalanche_org_notices.csv"))
+
+
+class TestNoticesLookup:
+    @staticmethod
+    def _downloader(tmp_path) -> AvalancheOrgDownloader:
+        dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
+        dl.logger = MagicMock()
+        dl.notices_file = str(tmp_path / "avalanche_org_notices.csv")
+        return dl
+
+    @staticmethod
+    def _rows(path: str) -> list[dict[str, str]]:
+        with open(path, newline="") as handle:
+            return list(csv.DictReader(handle))
+
+    @patch("downloader.base.BaseDownloader._get_json")
+    def test_download_writes_the_lookup(self, mock_get_json, tmp_path):
+        mock_get_json.return_value = {"type": "FeatureCollection", "features": [_make_feature()]}
+        dl = self._downloader(tmp_path)
+        records = dl.download_by_date_range("unused", dt.datetime(2026, 9, 15), dt.datetime(2026, 9, 15))
+
+        assert len(records) == 1
+        rows = self._rows(dl.notices_file)
+        assert len(rows) == 1
+        assert rows[0]["place_location"] == "Front Range"
+        assert rows[0]["state"] == "CO"
+        assert float(rows[0]["latitude"]) == pytest.approx(39.6)
+        assert float(rows[0]["longitude"]) == pytest.approx(-105.4)
+
+    @patch("downloader.base.BaseDownloader._get_json")
+    def test_download_keeps_zones_absent_from_the_feed(self, mock_get_json, tmp_path):
+        dl = self._downloader(tmp_path)
+        with open(dl.notices_file, "w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["place_location", "state", "latitude", "longitude"])
+            writer.writerow(["Whitefish Range", "MT", 48.8, -114.0])
+        mock_get_json.return_value = {"type": "FeatureCollection", "features": [_make_feature()]}
+
+        dl.download_by_date_range("unused", dt.datetime(2026, 9, 15), dt.datetime(2026, 9, 15))
+
+        rows = self._rows(dl.notices_file)
+        assert [(row["place_location"], row["state"]) for row in rows] == [
+            ("Front Range", "CO"),
+            ("Whitefish Range", "MT"),
+        ]
+        assert rows[1]["latitude"] == "48.8"
+
+    def test_merge_refreshes_coordinates_of_a_known_zone(self, tmp_path):
+        dl = self._downloader(tmp_path)
+        with open(dl.notices_file, "w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["place_location", "state", "latitude", "longitude"])
+            writer.writerow(["Front Range", "CO", 0.0, 0.0])
+
+        dl._update_notices([{"zone_name": " Front Range ", "state": "CO", "latitude": 39.6, "longitude": -105.4}])
+
+        rows = self._rows(dl.notices_file)
+        assert len(rows) == 1
+        assert float(rows[0]["latitude"]) == pytest.approx(39.6)
+        assert float(rows[0]["longitude"]) == pytest.approx(-105.4)
+
+    def test_records_without_coordinates_do_not_enter_the_lookup(self, tmp_path):
+        dl = self._downloader(tmp_path)
+
+        dl._update_notices([{"zone_name": "No Geometry", "state": "CO", "latitude": "", "longitude": ""}])
+
+        assert not os.path.exists(dl.notices_file)
+
+    def test_empty_record_list_writes_nothing(self, tmp_path):
+        dl = self._downloader(tmp_path)
+
+        dl._update_notices([])
+
+        assert not os.path.exists(dl.notices_file)

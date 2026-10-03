@@ -54,7 +54,8 @@ GEO_Download/
 │   ├── IBTrACS/
 │   ├── USGS_Volcano/
 │   ├── NIFC/
-│   └── rivers.json            # River definitions (126 major world rivers)
+│   ├── rivers.json            # River definitions (126 major world rivers)
+│   └── avalanche_org_notices.csv  # Avalanche zone centroid lookup (place_location, state, latitude, longitude)
 └── logs/                      # Timestamped log files (per source subfolder)
     ├── USGS_Earthquake/
     ├── GDACS/

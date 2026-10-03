@@ -132,7 +132,7 @@ Conventions shared by every source:
 
 ## Avalanche.org (US Avalanche Forecasts)
 
-- **File:** `data/Avalanche_ORG/avalancheorg_avalanche_YYYY-MM-DD.csv` · 14 columns
+- **File:** `data/Avalanche_ORG/avalancheorg_avalanche_YYYY-MM-DD.csv` · 16 columns
 - **Grain:** one row per forecast zone per day · **Coverage:** 28 US avalanche centers / 82+ zones; the map-layer endpoint is queried once per day.
 
 | Column | Type / unit | Description |
@@ -150,7 +150,11 @@ Conventions shared by every source:
 | `forecast_end` | ISO local datetime | When the forecast expires (`end_date`) — typically ~24 h after `forecast_start`, longer for weekly/monthly publishers |
 | `warning` | text | `warning.product` = `warning` while an Avalanche Warning covers the zone (the most severe alert: large avalanches certain/very likely, or High/Extreme danger expected); otherwise empty |
 | `link` | URL | The zone's forecast page on the center site (falls back to the center homepage when off-season or archived) |
+| `latitude` | degrees | Area weighted centroid of the zone polygon, rounded to 6 decimals (WGS84); empty when the feature has no usable geometry |
+| `longitude` | degrees | Same centroid, longitude |
 | `date` | `YYYY-MM-DD` | Day that was queried — added by the downloader, not present in the API response (matches the API's `?day=` archive parameter) |
+
+> ℹ **Zone centroid lookup.** Every centroid is also merged into the consolidated lookup `data/avalanche_org_notices.csv` (`place_location, state, latitude, longitude`, one row per zone keyed zone name + state, sorted by state). Existing rows are kept when a zone disappears from the feed, so zones that leave the daily map stay covered.
 
 > ℹ **Danger scale (NAPADS).** 1 *Low* — generally safe; watch for unstable snow on isolated features.
 > 2 *Moderate* — heightened conditions on specific terrain features; evaluate carefully.
