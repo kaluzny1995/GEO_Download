@@ -91,7 +91,9 @@
       "output_folder": "data/USGS_Volcano",
       "output_file_pattern": "usgs_volcanoes_{date}.csv",
       "is_date_to_previous_day": true,
-      "params": {}
+      "params": {
+        "notices_file": "data/usgs_volcano_notices.csv"
+      }
     },
     "NIFC": {
       "type": "nifc",

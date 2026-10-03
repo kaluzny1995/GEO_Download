@@ -275,7 +275,7 @@ _File total: **174 columns** = 19 core + 155 agency._
 
 ## USGS Volcano
 
-- **File:** `data/USGS_Volcano/usgs_volcanoes_YYYY-MM-DD.csv` · 11 columns
+- **File:** `data/USGS_Volcano/usgs_volcanoes_YYYY-MM-DD.csv` · 16 columns
 - **Grain:** one row per notice for an elevated volcano · **Coverage:** only volcanoes above `NORMAL` alert (ADVISORY / WATCH / WARNING), filtered to notices issued inside the requested day.
 
 | Column | Type / unit | Description |
@@ -291,6 +291,13 @@ _File total: **174 columns** = 19 core + 155 agency._
 | `notice_date` | `YYYY-MM-DD HH:MM:SS` UTC | Time the notice was sent (`sent_utc`) — this is what the day filter uses |
 | `notice_url` | URL | Public notice page: `https://volcanoes.usgs.gov/hans-public/notice/<notice_identifier>` |
 | `notice_data_url` | URL | HANS API endpoint with the notice content as JSON/HTML: `…/hans-public/api/notice/getNotice/<notice_identifier>` |
+| `notice_type_name` | text | Full notice type resolved from the notice lookup, e.g. `Daily Update`, `Weekly Update`, `Volcano Activity Notification` — the feed's own `notice_type` code above stays untouched |
+| `latitude` | decimal degrees | Volcano coordinate from the notice's own section (`lat`), empty when the notice reports none |
+| `longitude` | decimal degrees | Volcano coordinate from the notice's own section (`lng`), empty when the notice reports none |
+| `region` | text | Volcano region from the notice's own section, e.g. `Aleutians` |
+| `synopsis` | text | The notice's one-line status for that volcano, e.g. `AVO Great Sitkin ORANGE/WATCH - Slow eruption of lava continues.` |
+
+> ℹ **Notice-detail lookup.** The feed only carries the notice's headline fields — coordinates, region, status line and full notice type live behind the notice endpoint and are stamped at download time through the consolidated lookup `data/usgs_volcano_notices.csv` (`notice_identifier, vnum, notice_type, latitude, longitude, region, synopsis`, one row per volcano section of a notice, sorted by key). A notice the file does not cover yet is fetched once (however many of its volcanoes appear) and persisted; notices are immutable once published, so a cached entry never goes stale. Records without an identifier or volcano number get empty values. A failed fetch or a payload without the requested section fails the download instead of leaving holes.
 
 ## NIFC (US Wildland Fires)
 
