@@ -294,7 +294,7 @@ _File total: **174 columns** = 19 core + 155 agency._
 
 ## NIFC (US Wildland Fires)
 
-- **File:** `data/NIFC/nifc_fires_YYYY-MM-DD.csv` · 16 columns
+- **File:** `data/NIFC/nifc_fires_YYYY-MM-DD.csv` · 17 columns
 - **Grain:** one row per fire-perimeter feature updated inside the day · **Provenance:** ArcGIS FeatureServer `attributes` from the WFIGS *Interagency Perimeters* layer — polygon geometry is not requested, but the feature **centroid** is (`returnCentroid=true`), which supplies `latitude`/`longitude`.
 
 | Column | Type / unit | Description |
@@ -308,6 +308,7 @@ _File total: **174 columns** = 19 core + 155 agency._
 | `fire_type_label` | text | Perimeter feature category (`poly_FeatureCategory`) from the NWCG Wildland Fire Event Polygon standard — this layer serves *Wildfire Daily Fire Perimeter* and *Prescribed Fire*; the standard also allows *Wildfire Final Fire Perimeter*, *Unburned Island*, *Unknown*, … |
 | `jurisdiction` | code | Point-of-origin jurisdictional agency (`attr_POOJurisdictionalAgency`) — the agency with land-management responsibility for the origin land: `USFS`, `BLM`, `BIA`, `NPS`, `USFWS`, `DNR`, `SF`, `SFS`, … empty when unset |
 | `jurisdiction_label` | code | NWCG unit id of that land (`attr_POOJurisdictionalUnit`) with the leading `US` stripped — 2-letter state + 3–4-char unit code, e.g. `WAOWF` Okanogan-Wenatchee NF, `ORUMF` Umatilla NF, `CAYNP` Yosemite NP — a *code*, not a name |
+| `unit_name` | text | Full name of `jurisdiction_label` resolved at download time through the consolidated lookup `data/nifc_unit_names.csv` (`WAOWF` → `Okanogan-Wenatchee National Forest`); a code the lookup does not know keeps its raw value, a blank code stays empty |
 | `state` | 2-letter code | Point-of-origin state (`attr_POOState`) with the `US-` prefix stripped |
 | `po_method` | code | **Named misleadingly** — the raw IRWIN point-of-origin state code (`attr_POOState`, `US-CO`), i.e. the unstripped source of `state` |
 | `latitude` | degrees | Perimeter **centroid** latitude (`returnCentroid=true`, WGS84); falls back to `attr_InitialLatitude` (point of origin) when the service omits it |
@@ -324,6 +325,13 @@ _File total: **174 columns** = 19 core + 155 agency._
 > files from 2026-09-18 until 2026-09-26, when the columns were re-mapped to real field
 > names and the downloader started logging `error` payloads (`NIFC API rejected the query: …`).
 > The layer exposes no human-readable agency name, hence `jurisdiction_label` holds a unit *code*.
+>
+> ℹ **Unit-name lookup.** The downloader resolves that code into `unit_name` through the
+> consolidated lookup `data/nifc_unit_names.csv` (`unit_code, unit_name`, one row per unit,
+> sorted by code), built when missing and refreshed from the public
+> [`DMP_JurisdictionalUnits_Public`](https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/DMP_JurisdictionalUnits_Public/FeatureServer/0/query)
+> layer whenever the data carries a code the file does not know — one request per refresh,
+> so the ETL reads the full name straight from the source row.
 >
 > Fields a query must not omit: `poly_IncidentName`, `poly_IRWINID`, `poly_FeatureCategory`,
 > `poly_GISAcres`, `poly_DateCurrent`, `attr_IncidentTypeCategory`, `attr_FireDiscoveryDateTime`,

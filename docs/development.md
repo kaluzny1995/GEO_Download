@@ -22,7 +22,7 @@ Tests cover:
 - **USGS NWIS downloader** — legacy WaterServices API, time series parsing, site metadata extraction.
 - **IBTrACS downloader** — CSV parsing with units row skip, `ISO_TIME` column resolution by header name (regression: a fixed column index dropped every record), date filtering, custom dataset selection, error handling.
 - **USGS Volcano downloader** — HANS API response parsing, alert filtering, notice URL construction.
-- **NIFC downloader** — ArcGIS FeatureServer query, `outFields`/centroid handling, ArcGIS error-payload detection, date/time filtering.
+- **NIFC downloader** — ArcGIS FeatureServer query, `outFields`/centroid handling, ArcGIS error-payload detection, date/time filtering, unit-name lookup maintenance (`data/nifc_unit_names.csv`, refresh when the data carries an unknown code) and `unit_name` stamping with raw-code fallback.
 - **Avalanche downloader** — GeoJSON record building, area weighted zone polygon centroid (holes subtracted), notices lookup merge keyed zone name + state (keeps zones that leave the feed, skips records without geometry).
 - **Run orchestration** — `save_csv()` (file written / no data / failed write) and the [failure contract](architecture.md#exit-codes) of `download_source()` and `main()` (files saved → returns normally, no files → `RuntimeError`, local data already current → `0`).
 

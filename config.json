@@ -101,7 +101,9 @@
       "output_folder": "data/NIFC",
       "output_file_pattern": "nifc_fires_{date}.csv",
       "is_date_to_previous_day": true,
-      "params": {}
+      "params": {
+        "unit_names_file": "data/nifc_unit_names.csv"
+      }
     }
   }
 }
