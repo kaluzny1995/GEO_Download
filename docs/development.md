@@ -60,11 +60,11 @@ ruff rule SIM108                        # print the docs for a single rule
 
 Rules are configured in `pyproject.toml`:
 
-- `line-length = 120`, `target-version = "py311"`; `data/`, `logs/`, `__pycache__` are excluded.
+- `line-length = 120`, `target-version = "py311"`; `data/`, `logs/`, `__pycache__`, `.idea` are excluded.
 - Enabled families: `E,W` (pycodestyle), `F` (pyflakes), `I` (import sorting), `B` (bugbear), `UP` (pyupgrade), `C4` (comprehensions), `SIM` (simplify), `RUF` (ruff-specific).
 - Exceptions: `SIM108` ignored (ternary rewrites), `F401` ignored in `__init__.py`, `B011` ignored in `test/**`.
 
-Current state: `ruff check .` → **0 findings**. `ruff format --check .` still reports 20 files — the formatter has intentionally **not** been applied repo-wide to keep the diff reviewable; run `tox -e format-fix` if you decide to adopt it.
+Current state: `ruff check .` → **0 findings**. `ruff format --check .` still reports 11 files (34 already formatted) — the formatter has intentionally **not** been applied repo-wide to keep the diff reviewable; run `tox -e format-fix` if you decide to adopt it.
 
 ### tox — run the pipeline
 
@@ -74,10 +74,10 @@ Current state: `ruff check .` → **0 findings**. `ruff format --check .` still 
 |---------|-----------|--------|
 | `tox` | default gate = `lint` + `py311` | ✅ |
 | `tox -e lint` | `ruff check --output-format=concise .` | ✅ |
-| `tox -e py311` | full pytest suite (109 tests) | ✅ |
-| `tox -e typecheck` | `mypy model downloader downloader_factory.py util.py run_download.py` | ✅ |
+| `tox -e py311` | full pytest suite (200 tests) | ✅ |
+| `tox -e typecheck` | `mypy model downloader downloader_factory.py util.py run_download.py reverse_geocode.py` | ✅ |
 | `tox -e warnings` | `pytest -W error::DeprecationWarning` | ✅ |
-| `tox -e format` | `ruff format --check .` | ❌ 20 files (see above) |
+| `tox -e format` | `ruff format --check .` | ❌ 11 files (see above) |
 | `tox -e format-fix` | `ruff format .` — writes the changes | – |
 | `tox -e lint,py311,typecheck` | any list of environments in one invocation | – |
 
@@ -97,7 +97,7 @@ Notes:
 ### PyCharm integration
 
 - **Ruff in the IDE:** `Settings → Python → Tools → External Tools → Ruff` (PyCharm 2026.2 ships native support) — enable *Inspections*, *Formatting* and *Import optimizer*, and point it at the `ruff` binary of the `geo_download_311` env. It reads the same `pyproject.toml` rules, so IDE and CLI agree.
-- **Inspection profile:** the project uses `.idea/inspectionProfiles/Project_Default.xml` (`USE_PROJECT_PROFILE=true`), where only spell-check, HTTP-URL and Markdown-table noise is disabled and `data/`, `logs/`, `__pycache__` are excluded from analysis.
+- **Inspection profile:** the project uses `.idea/inspectionProfiles/Project_Default.xml` (`USE_PROJECT_PROFILE=true`), where spell-check, HTTP-URL, Markdown-table and `__init__`-signature (`PyInitNewSignature`) inspections are disabled and the stub-package prompt is muted for `celery` and `pandas`. The folders `data/`, `logs/` and `__pycache__` are excluded from analysis in `.idea/GEODownload.iml`, not in the profile.
 - **Headless check** (CI-style, PyCharm must be closed):
 
   ```bash

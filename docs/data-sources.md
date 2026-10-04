@@ -124,7 +124,7 @@ Conventions shared by every source:
 
 ## USGS NWIS (US Streamflow)
 
-- **File:** `data/USGS_NWIS/usgs_streamflow_YYYY-MM-DD.csv` · 11 columns
+- **File:** `data/USGS_NWIS/usgs_streamflow_YYYY-MM-DD.csv` · 10 columns
 - **Grain:** one row per gauge per day · **Defaults:** site `01646500` (Potomac River near Washington DC), parameter `00060` (discharge) — both configurable via `sites` / `parameter_code`.
 
 | Column | Type / unit | Description |
@@ -283,7 +283,7 @@ Each agency column is `<PREFIX>_<SUFFIX>` and holds the value **as reported by t
 | `_STAGE` | — | Stage/intensity code: `DS824_STAGE` `DS` disturbance · `WV` wave · `TC` tropical cyclone · `EX` extratropical · `MM` missing; `TD9636_STAGE` 0–7 (0 disturbance, 1 depression <34 kt, 2 storm 34–63 kt, 3 ≥64 kt, 4 hurricane, 5 extratropical, 6 dissipating, 7 doubtful) |
 | `_CLASS` | — | Agency class: `TC` tropical, `EX` extratropical, `MM` missing (the Chenoweth `MLC` dataset also uses `TD`, `TS`, `HU`, `MH`, `SD`, `SS`, `LO`, `WV`) |
 
-_File total: **174 columns** = 19 core + 155 agency._
+_File total: **176 columns** = 19 core + 155 agency + 2 stamped geocode._
 
 ## USGS Volcano
 

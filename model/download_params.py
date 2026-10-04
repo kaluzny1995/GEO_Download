@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from model.source_config import SourceConfig
 
@@ -6,8 +6,7 @@ from model.source_config import SourceConfig
 class DownloadParams(BaseModel):
     source: SourceConfig
 
-    class ConfigDict:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
     @staticmethod
     def from_source(source: SourceConfig) -> 'DownloadParams':

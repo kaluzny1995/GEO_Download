@@ -34,6 +34,7 @@ The architecture is extensible: new data sources can be added by implementing a 
 - **Retry with backoff** — HTTP requests use exponential backoff (5 retries) with automatic retry on 429 and 5xx status codes.
 - **Abstract base class** — `BaseDownloader` provides shared session setup, JSON fetching, and CSV parsing; new sources only implement `download_by_date_range()`.
 - **Factory/Registry pattern** — new data sources are added via self-registering downloader classes.
+- **Reverse-geocode stamping** — `geocode_country` / `geocode_state` are reverse-geocoded at download time by `reverse_geocode.py` and appended to the downloaded CSVs through the shared lookup `data/reverse_geocode.csv`, so GEO_ETL never queries the geocoding API itself; the [Data sources](docs/data-sources.md) tables say which columns each source gets.
 - **Frozen Pydantic models** — all configuration and parameter objects are immutable.
 - **Structured logging** — each run produces a timestamped log file under `logs/<SourceName>/`.
 - **Fails on an empty run** — a run exits `0` only when at least one CSV was written (or the local data is already current); a run that requested days but saved nothing raises `RuntimeError` (traceback, exit code `1`), so a chained pipeline (GEO_E2E) stops instead of ingesting stale files.
@@ -101,10 +102,10 @@ Source name: USGS_Earthquake
 Source type: usgs_earthquake
 API URL: https://earthquake.usgs.gov/fdsnws/event/1/query
 Output folder: data/USGS_Earthquake
-Output file pattern: earthquakes_{date}.csv
+Output file pattern: usgs_earthquakes_{date}.csv
 Load type: INCREMENTAL
 Start date: 2026-09-14 00:00:00
-End date: 2026-09-13 00:00:00
+End date: 2026-09-14 00:00:00
 
 Downloading data for 2026-09-14.
 File data/USGS_Earthquake/usgs_earthquakes_2026-09-14.csv saved. Records: 142.
@@ -116,6 +117,27 @@ Done.
 
 ```bash
 python run_download.py GDACS
+```
+
+```
+---- GDACS Downloader ----
+
+Source name: GDACS
+Source type: gdacs
+API URL: https://www.gdacs.org/gdacsapi/api/Events/geteventlist/SEARCH
+Output folder: data/GDACS
+Output file pattern: gdacs_disasters_{date}.csv
+Load type: HISTORICAL
+Start date: 2026-09-01 00:00:00
+End date: 2026-09-14 00:00:00
+
+Downloading GDACS events for 2026-09-01 to 2026-09-01.
+  Page 1: 100 events
+  Page 2: 47 events
+Downloaded 147 GDACS events total
+File data/GDACS/gdacs_disasters_2026-09-01.csv saved. Records: 147.
+
+Done.
 ```
 
 **Natural events (NASA EONET):**
@@ -154,25 +176,10 @@ python run_download.py USGS_Volcano
 python run_download.py NIFC
 ```
 
-```
----- GDACS Downloader ----
+**US avalanche forecasts (Avalanche.org):**
 
-Source name: GDACS
-Source type: gdacs
-API URL: https://www.gdacs.org/gdacsapi/api/Events/geteventlist/SEARCH
-Output folder: data/GDACS
-Output file pattern: disasters_{date}.csv
-Load type: HISTORICAL
-Start date: 2026-09-01 00:00:00
-End date: 2026-09-14 00:00:00
-
-Downloading GDACS events for 2026-09-01 to 2026-09-01.
-  Page 1: 100 events
-  Page 2: 47 events
-Downloaded 147 GDACS events total
-File data/GDACS/gdacs_disasters_2026-09-01.csv saved. Records: 147.
-
-Done.
+```bash
+python run_download.py Avalanche_ORG
 ```
 
 ## Dataflow

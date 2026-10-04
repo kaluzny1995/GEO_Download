@@ -1,6 +1,6 @@
 import json
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from model.source_config import SourceConfig
 
@@ -9,8 +9,7 @@ class AppConfig(BaseModel):
     """ App config class """
     sources: dict[str, SourceConfig]
 
-    class ConfigDict:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
     @staticmethod
     def from_json() -> 'AppConfig':

@@ -1,6 +1,6 @@
 import datetime as dt
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 import util
 from model.e_load_type import ELoadType
@@ -12,8 +12,7 @@ class LoadParams(BaseModel):
     date_from: dt.datetime
     date_to: dt.datetime
 
-    class ConfigDict:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
     @staticmethod
     def from_source(source: SourceConfig) -> 'LoadParams':

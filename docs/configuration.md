@@ -11,10 +11,12 @@ The application is configured via `config.json`. Each data source is defined und
       "type": "usgs_earthquake",
       "enabled": true,
       "api_url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
+      "feed_url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.csv",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_Earthquake",
       "output_file_pattern": "usgs_earthquakes_{date}.csv",
-      "is_date_to_previous_day": true
+      "is_date_to_previous_day": true,
+      "params": {}
     },
     "GDACS": {
       "type": "gdacs",
@@ -23,7 +25,11 @@ The application is configured via `config.json`. Each data source is defined und
       "start_date": "2026-09-01",
       "output_folder": "data/GDACS",
       "output_file_pattern": "gdacs_disasters_{date}.csv",
-      "is_date_to_previous_day": true
+      "is_date_to_previous_day": true,
+      "params": {
+        "event_types": "EQ;TC;FL;VO;WF;DR",
+        "page_size": 100
+      }
     },
     "EONET": {
       "type": "eonet",
@@ -32,7 +38,8 @@ The application is configured via `config.json`. Each data source is defined und
       "start_date": "2026-09-01",
       "output_folder": "data/EONET",
       "output_file_pattern": "eonet_events_{date}.csv",
-      "is_date_to_previous_day": true
+      "is_date_to_previous_day": true,
+      "params": {}
     },
     "OpenMeteo_Flood": {
       "type": "openmeteo_flood",
@@ -41,7 +48,10 @@ The application is configured via `config.json`. Each data source is defined und
       "start_date": "2026-09-01",
       "output_folder": "data/OpenMeteo_Flood",
       "output_file_pattern": "openmeteo_rivers_{date}.csv",
-      "is_date_to_previous_day": true
+      "is_date_to_previous_day": true,
+      "params": {
+        "rivers_file": "data/rivers.json"
+      }
     },
     "USGS_NWIS": {
       "type": "usgs_nwis",
@@ -50,7 +60,23 @@ The application is configured via `config.json`. Each data source is defined und
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_NWIS",
       "output_file_pattern": "usgs_streamflow_{date}.csv",
-      "is_date_to_previous_day": true
+      "is_date_to_previous_day": true,
+      "params": {
+        "sites": "01646500",
+        "parameter_code": "00060"
+      }
+    },
+    "Avalanche_ORG": {
+      "type": "avalanche_org",
+      "enabled": true,
+      "api_url": "https://api.avalanche.org/v2/public/products/map-layer",
+      "start_date": "2026-09-01",
+      "output_folder": "data/Avalanche_ORG",
+      "output_file_pattern": "avalancheorg_avalanche_{date}.csv",
+      "is_date_to_previous_day": true,
+      "params": {
+        "notices_file": "data/avalanche_org_notices.csv"
+      }
     },
     "IBTrACS": {
       "type": "ibtracs",
@@ -59,7 +85,10 @@ The application is configured via `config.json`. Each data source is defined und
       "start_date": "2026-09-01",
       "output_folder": "data/IBTrACS",
       "output_file_pattern": "ibtracs_cyclones_{date}.csv",
-      "is_date_to_previous_day": true
+      "is_date_to_previous_day": true,
+      "params": {
+        "dataset": "last3years"
+      }
     },
     "USGS_Volcano": {
       "type": "usgs_volcano",
@@ -68,7 +97,10 @@ The application is configured via `config.json`. Each data source is defined und
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_Volcano",
       "output_file_pattern": "usgs_volcanoes_{date}.csv",
-      "is_date_to_previous_day": true
+      "is_date_to_previous_day": true,
+      "params": {
+        "notices_file": "data/usgs_volcano_notices.csv"
+      }
     },
     "NIFC": {
       "type": "nifc",
@@ -77,7 +109,10 @@ The application is configured via `config.json`. Each data source is defined und
       "start_date": "2026-09-01",
       "output_folder": "data/NIFC",
       "output_file_pattern": "nifc_fires_{date}.csv",
-      "is_date_to_previous_day": true
+      "is_date_to_previous_day": true,
+      "params": {
+        "unit_names_file": "data/nifc_unit_names.csv"
+      }
     }
   }
 }
@@ -88,8 +123,34 @@ The application is configured via `config.json`. Each data source is defined und
 | `type`                   | Source type identifier — maps to a registered downloader via `ESourceType` enum. |
 | `enabled`                | Whether this source is active and available for download.               |
 | `api_url`                | Base API URL used by the downloader to construct query requests.        |
+| `feed_url`               | Optional second upstream feed URL — `str`, defaults to `""` when the key is omitted. Only `USGS_Earthquake` sets it (the rolling all-day summary feed); no downloader consumes it yet. |
 | `start_date`             | Earliest date to download from (used in historical mode).               |
 | `output_folder`          | Directory where CSV files are saved.                                    |
 | `output_file_pattern`    | Filename pattern — `{date}` is replaced with `YYYY-MM-DD`.              |
 | `is_date_to_previous_day`| If `true`, the end date is yesterday; if `false`, it's today.           |
-| `params`                 | Additional source-specific parameters passed to the downloader constructor. |
+| `params`                 | Extra keyword arguments spread into the downloader constructor (`run_download.py` calls `get_downloader(source.type, logger=logger, **source.params)`) — see [Per-source `params`](#per-source-params). |
+
+## Per-source `params`
+
+Every downloader accepts the shared keys below; source-specific keys are listed after them.
+Unknown keys raise `TypeError` when the downloader is constructed (the chain aborts before any download).
+
+| Key | Type / default | Meaning |
+|-----|----------------|---------|
+| `timeout` | `int` — `30`, or `60` for `IBTrACS` and `USGS_NWIS` | HTTP request timeout in seconds. |
+| `log_folder` | `str` — unset | When set, logs go to `logs/<log_folder>/<log_folder>_<timestamp>.log` instead of `logs/downloader_<timestamp>.log`. Ignored by `run_download.py`, which always passes its own `logger`. |
+| `reverse_geocode_file` | `str` — `data/reverse_geocode.csv` | Reverse-geocoding lookup file (all sources **except** `Avalanche_ORG`, whose constructor does not take it). |
+
+| Source | Key | Type / default | Meaning |
+|--------|-----|----------------|---------|
+| `GDACS` | `event_types` | `str` — `EQ;TC;FL;VO;WF;DR` | `;`-separated GDACS event codes to fetch. |
+| `GDACS` | `page_size` | `int` — `100` | Events per API page (the downloader pages until exhausted). |
+| `OpenMeteo_Flood` | `rivers_file` | `str` — `data/rivers.json` | Rivers reference file used to build the query. |
+| `USGS_NWIS` | `sites` | `str` — `01646500` | Gauge site ID(s) sent as the `sites=` query parameter. |
+| `USGS_NWIS` | `parameter_code` | `str` — `00060` | Parameter code sent as `parameterCd=` (`00060` = discharge, cfs). |
+| `IBTrACS` | `dataset` | `str` — `last3years` | IBTrACS dataset slice to download. |
+| `Avalanche_ORG` | `notices_file` | `str` — `data/avalanche_org_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
+| `USGS_Volcano` | `notices_file` | `str` — `data/usgs_volcano_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
+| `NIFC` | `unit_names_file` | `str` — `data/nifc_unit_names.csv` | Fire-unit name lookup CSV. |
+
+`USGS_Earthquake` and `EONET` have no source-specific keys (`"params": {}` in the shipped config).

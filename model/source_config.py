@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SourceConfig(BaseModel):
@@ -15,5 +15,4 @@ class SourceConfig(BaseModel):
     is_date_to_previous_day: bool = True
     params: dict[str, Any] = {}
 
-    class ConfigDict:
-        frozen = True
+    model_config = ConfigDict(frozen=True)

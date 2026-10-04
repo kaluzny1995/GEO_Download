@@ -10,6 +10,7 @@ GEO_Download/
 ├── config.json                # Data source configuration
 ├── downloader_factory.py      # Factory/registry for downloader classes
 ├── util.py                    # Logger setup, date range generator, file date detection
+├── reverse_geocode.py         # Reverse geocoding — shared geocode_country/geocode_state lookup (used by downloader/base.py)
 ├── environment.yml            # Conda environment definition
 ├── pyproject.toml             # Ruff rules + pytest config
 ├── tox.ini                    # lint / test / typecheck / format environments
@@ -19,7 +20,7 @@ GEO_Download/
 │   ├── source_config.py       # SourceConfig — per-source settings
 │   ├── download_params.py     # DownloadParams — download parameters
 │   ├── load_params.py         # LoadParams — determines load type and date range
-│   └── e_source_type.py       # ESourceType enum (usgs_earthquake, gdacs, eonet, openmeteo_flood, usgs_nwis, avalanche_org, ibtracs, usgs_volcano, nifc)
+│   ├── e_source_type.py       # ESourceType enum (usgs_earthquake, gdacs, eonet, openmeteo_flood, usgs_nwis, avalanche_org, ibtracs, usgs_volcano, nifc)
 │   └── e_load_type.py         # ELoadType enum (HISTORICAL / INCREMENTAL)
 ├── downloader/                # Downloader classes (base + concrete implementations)
 │   ├── __init__.py            # Imports + factory registrations
@@ -33,17 +34,26 @@ GEO_Download/
 │   ├── ibtracs.py             # IBTrACSDownloader
 │   ├── usgs_volcano.py       # USGSVolcanoDownloader
 │   ├── nifc.py                # NIFCDownloader
-├── test/                      # Unit tests
-│   ├── test_base_downloader.py
-│   ├── test_models.py
+├── test/                      # Unit tests (test/ root + test/downloader/ subpackage)
+│   ├── __init__.py
 │   ├── test_downloader_factory.py
+│   ├── test_models.py
+│   ├── test_reverse_geocode.py
+│   ├── test_run_download.py
 │   ├── test_util.py
-│   ├── test_usgs_downloader.py
-│   ├── test_gdacs_downloader.py
-│   ├── test_eonet_downloader.py
-│   ├── test_openmeteo_flood_downloader.py
-│   ├── test_usgs_nwis_downloader.py
-│   ├── test_ibtracs_downloader.py
+│   └── downloader/            # Per-downloader tests (a pytest subpackage)
+│       ├── __init__.py
+│       ├── conftest.py
+│       ├── test_avalanche_org_downloader.py
+│       ├── test_base_downloader.py
+│       ├── test_eonet_downloader.py
+│       ├── test_gdacs_downloader.py
+│       ├── test_ibtracs_downloader.py
+│       ├── test_nifc_downloader.py
+│       ├── test_openmeteo_flood_downloader.py
+│       ├── test_usgs_downloader.py
+│       ├── test_usgs_nwis_downloader.py
+│       └── test_usgs_volcano_downloader.py
 ├── data/                      # Downloaded CSV files (per source subfolder)
 │   ├── USGS_Earthquake/
 │   ├── GDACS/
@@ -65,6 +75,7 @@ GEO_Download/
     ├── EONET/
     ├── OpenMeteo_Flood/
     ├── USGS_NWIS/
+    ├── Avalanche_ORG/
     ├── IBTrACS/
     ├── USGS_Volcano/
     ├── NIFC/
