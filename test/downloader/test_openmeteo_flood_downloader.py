@@ -183,3 +183,24 @@ def test_download_by_date_range_api_error():
 
     # Assert
     assert result == []
+
+
+def test_download_stamps_geocode_country_and_state(tmp_path):
+    """Every river point is reverse-geocoded into the stamped pair."""
+    rivers_file = tmp_path / "rivers.json"
+    rivers_file.write_text(json.dumps(SAMPLE_RIVERS))
+    lookup = str(tmp_path / "reverse_geocode.csv")
+    downloader = OpenMeteoFloodDownloader(
+        logger=MockLogger(), rivers_file=str(rivers_file), reverse_geocode_file=lookup
+    )
+
+    with patch.object(downloader, "_query_river", return_value=SAMPLE_API_RESPONSE):
+        result = downloader.download_by_date_range(
+            "https://ignored.com",
+            dt.datetime(2026, 9, 1),
+            dt.datetime(2026, 9, 3),
+        )
+
+    assert len(result) == 9
+    assert all(record["geocode_country"] == "US" for record in result)
+    assert all(record["geocode_state"] == "MT" for record in result)

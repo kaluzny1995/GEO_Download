@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from downloader.base import BaseDownloader
+from reverse_geocode import stamp_geocode
 
 JURISDICTION_API_URL = (
     "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/"
@@ -64,7 +65,11 @@ class NIFCDownloader(BaseDownloader):
     the lookup does not know it, empty when the code is blank. The lookup is
     built when missing and refreshed from the public
     ``DMP_JurisdictionalUnits_Public`` layer when the data carries an unknown
-    code, so the ETL reads ``unit_name`` straight from the source row.
+    code, so the ETL reads ``unit_name`` straight from the source row. Every
+    record also carries ``geocode_state`` — the reverse-geocoded subdivision
+    of the perimeter point — but only blank-``state`` records ever reach the
+    API (the same subset the ETL used to look up), so the ETL reads the
+    fallback straight from the source row too.
     """
 
     _OUT_FIELDS: ClassVar[list[str]] = [
@@ -95,8 +100,11 @@ class NIFCDownloader(BaseDownloader):
         logger: logging.Logger | None = None,
         log_folder: str | None = None,
         unit_names_file: str | None = None,
+        reverse_geocode_file: str | None = None,
     ):
-        super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
+        super().__init__(
+            timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
+        )
         self.unit_names_file = unit_names_file or self.DEFAULT_UNIT_NAMES_FILE
 
     @staticmethod
@@ -300,6 +308,13 @@ class NIFCDownloader(BaseDownloader):
             all_records.append(record)
 
         self._resolve_unit_names(all_records)
+        stamp_geocode(
+            all_records,
+            output=self.reverse_geocode_file,
+            columns=("geocode_state",),
+            fetch_filter=lambda record: not str(record.get("state") or "").strip(),
+            logger=self.logger,
+        )
 
         self.logger.info(f"Downloaded {len(all_records)} NIFC fire perimeter records total")
         return all_records

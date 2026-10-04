@@ -5,19 +5,31 @@ import logging
 from typing import Any
 
 from downloader.base import BaseDownloader
+from reverse_geocode import stamp_geocode
 
 
 class USGSNWISDownloader(BaseDownloader):
     """Downloads daily streamflow data from the USGS NWIS WaterServices API.
 
     Queries daily discharge values (parameter code 00060, mean statistic 00003)
-    from the USGS National Water Information System.
+    from the USGS National Water Information System. Each gauge point is
+    reverse-geocoded into ``geocode_state`` (shared lookup
+    ``data/reverse_geocode.csv``), the subdivision the ETL used to resolve
+    itself.
     """
 
-    def __init__(self, timeout: int = 60, logger: logging.Logger | None = None,
-                 log_folder: str | None = None,
-                 sites: str = "01646500", parameter_code: str = "00060"):
-        super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
+    def __init__(
+        self,
+        timeout: int = 60,
+        logger: logging.Logger | None = None,
+        log_folder: str | None = None,
+        sites: str = "01646500",
+        parameter_code: str = "00060",
+        reverse_geocode_file: str | None = None,
+    ):
+        super().__init__(
+            timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
+        )
         self._sites = sites
         self._parameter_code = parameter_code
 
@@ -81,5 +93,6 @@ class USGSNWISDownloader(BaseDownloader):
                     record = self._build_record(ts, value_entry, site_info)
                     all_records.append(record)
 
+        stamp_geocode(all_records, output=self.reverse_geocode_file, columns=("geocode_state",), logger=self.logger)
         self.logger.info(f"Downloaded {len(all_records)} USGS NWIS records total")
         return all_records

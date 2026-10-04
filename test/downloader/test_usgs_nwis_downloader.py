@@ -22,31 +22,33 @@ SAMPLE_API_RESPONSE: dict[str, Any] = {
                     "variableName": "Streamflow, ft³/s",
                     "unit": {"unitCode": "ft3/s"},
                 },
-                "values": [{
-                    "value": [
-                        {"value": "2320", "qualifiers": ["P"], "dateTime": "2026-09-01T00:00:00.000"},
-                        {"value": "2220", "qualifiers": ["P"], "dateTime": "2026-09-02T00:00:00.000"},
-                    ],
-                }],
+                "values": [
+                    {
+                        "value": [
+                            {"value": "2320", "qualifiers": ["P"], "dateTime": "2026-09-01T00:00:00.000"},
+                            {"value": "2220", "qualifiers": ["P"], "dateTime": "2026-09-02T00:00:00.000"},
+                        ],
+                    }
+                ],
             },
             {
                 "sourceInfo": {
                     "siteName": "HUDSON RIVER AT N TROY, NY",
                     "siteCode": [{"value": "01358000", "network": "NWIS", "agencyCode": "USGS"}],
-                    "geoLocation": {
-                        "geogLocation": {"srs": "EPSG:4326", "latitude": 42.75, "longitude": -73.68}
-                    },
+                    "geoLocation": {"geogLocation": {"srs": "EPSG:4326", "latitude": 42.75, "longitude": -73.68}},
                 },
                 "variable": {
                     "variableCode": [{"value": "00060"}],
                     "variableName": "Streamflow, ft³/s",
                     "unit": {"unitCode": "ft3/s"},
                 },
-                "values": [{
-                    "value": [
-                        {"value": "8500", "qualifiers": [], "dateTime": "2026-09-01T00:00:00.000"},
-                    ],
-                }],
+                "values": [
+                    {
+                        "value": [
+                            {"value": "8500", "qualifiers": [], "dateTime": "2026-09-01T00:00:00.000"},
+                        ],
+                    }
+                ],
             },
         ],
     }
@@ -143,3 +145,20 @@ def test_download_by_date_range_no_data():
         )
 
     assert result == []
+
+
+def test_download_stamps_geocode_state(tmp_path):
+    """Every gauge point is reverse-geocoded into geocode_state."""
+    lookup = str(tmp_path / "reverse_geocode.csv")
+    downloader = USGSNWISDownloader(logger=MockLogger(), reverse_geocode_file=lookup)
+
+    with patch.object(BaseDownloader, "_get_json", return_value=SAMPLE_API_RESPONSE):
+        result = downloader.download_by_date_range(
+            "https://ignored.com",
+            dt.datetime(2026, 9, 1),
+            dt.datetime(2026, 9, 2),
+        )
+
+    assert len(result) == 3
+    assert all(record["geocode_state"] == "MT" for record in result)
+    assert "geocode_country" not in result[0]

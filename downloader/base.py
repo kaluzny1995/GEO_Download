@@ -12,6 +12,7 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from urllib3.util.retry import Retry
 
+from reverse_geocode import DEFAULT_REVERSE_GEOCODE_FILE
 from util import setup_logger
 
 
@@ -21,10 +22,17 @@ class BaseDownloader(abc.ABC):
     session: requests.Session
     timeout: int
     logger: logging.Logger
+    reverse_geocode_file: str
 
-    def __init__(self, timeout: int = 30, logger: logging.Logger | None = None,
-                 log_folder: str | None = None) -> None:
+    def __init__(
+        self,
+        timeout: int = 30,
+        logger: logging.Logger | None = None,
+        log_folder: str | None = None,
+        reverse_geocode_file: str | None = None,
+    ) -> None:
         self.timeout = timeout
+        self.reverse_geocode_file = reverse_geocode_file or DEFAULT_REVERSE_GEOCODE_FILE
         if logger:
             self.logger = logger
         elif log_folder:
@@ -33,8 +41,9 @@ class BaseDownloader(abc.ABC):
                 log_file=f"logs/{log_folder}/{log_folder}_{dt.datetime.now().isoformat()}.log",
             )
         else:
-            self.logger = setup_logger(name="downloader",
-                                       log_file=f"logs/downloader_{dt.datetime.now().isoformat()}.log")
+            self.logger = setup_logger(
+                name="downloader", log_file=f"logs/downloader_{dt.datetime.now().isoformat()}.log"
+            )
         self.session = self._create_session()
 
     @staticmethod

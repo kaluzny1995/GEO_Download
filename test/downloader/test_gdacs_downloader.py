@@ -161,3 +161,24 @@ def test_download_by_date_range_no_data():
         )
 
     assert result == []
+
+
+def test_download_stamps_geocode_country_and_state(tmp_path):
+    """Every event centroid is reverse-geocoded; the source country_code is untouched."""
+    lookup = str(tmp_path / "reverse_geocode.csv")
+    downloader = GDACSDownloader(logger=MockLogger(), reverse_geocode_file=lookup)
+
+    def mock_get_json(_url):
+        return {"type": "FeatureCollection", "features": SAMPLE_FEATURES}
+
+    with patch.object(BaseDownloader, "_get_json", side_effect=mock_get_json):
+        result = downloader.download_by_date_range(
+            "https://ignored.com",
+            dt.datetime(2026, 9, 14),
+            dt.datetime(2026, 9, 15),
+        )
+
+    assert len(result) == 2
+    assert all(record["geocode_country"] == "US" for record in result)
+    assert all(record["geocode_state"] == "MT" for record in result)
+    assert result[1]["country_code"] == "COD"

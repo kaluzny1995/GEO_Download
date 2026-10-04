@@ -16,7 +16,9 @@ SAMPLE_CSV = (
     "2026002WP05,2026,2,WP,,,2026-09-03 00:00:00,HU,16.0,136.0,80,970,500,0\n"
 )
 
-TEST_BASE_URL = "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv"
+TEST_BASE_URL = (
+    "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv"
+)
 
 
 def _csv_to_bytes(text: str) -> list[bytes]:
@@ -229,3 +231,27 @@ def test_download_by_date_range_custom_dataset():
     called_url = mock_get.call_args[0][0]
     assert "ibtracs.all.list.v04r01.csv" in called_url
     assert len(result) == 3
+
+
+def test_download_stamps_geocode_pair_with_near_land_filter(tmp_path):
+    """Near-land rows are geocoded; far rows get the cached answer or an empty stamp."""
+    from reverse_geocode import coord_key, save_cache
+
+    lookup = tmp_path / "reverse_geocode.csv"
+    save_cache({coord_key(15.0, 135.0): ("PH", "PSA")}, str(lookup))
+    downloader = IBTrACSDownloader(logger=MockLogger(), reverse_geocode_file=str(lookup))
+
+    mock_response = MagicMock()
+    mock_response.iter_lines.return_value = _csv_to_bytes(SAMPLE_CSV)
+    mock_response.raise_for_status = MagicMock()
+
+    with patch.object(downloader.session, "get", return_value=mock_response):
+        result = downloader.download_by_date_range(
+            "https://example.com/api", dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 4)
+        )
+
+    by_key = {(record["LAT"], record["LON"]): record for record in result}
+    assert by_key[("26.0", "-81.0")]["geocode_state"] == "MT"  # DIST2LAND 100 → fetched
+    assert by_key[("27.0", "-82.0")]["geocode_country"] == "US"  # DIST2LAND 50 → fetched
+    assert by_key[("15.0", "135.0")]["geocode_state"] == "PSA"  # far, but cached
+    assert by_key[("25.0", "-80.0")]["geocode_country"] == ""  # DIST2LAND 150, not cached

@@ -10,6 +10,7 @@ from typing import ClassVar
 import requests
 
 from downloader.base import BaseDownloader
+from reverse_geocode import stamp_geocode
 
 NOTICE_API_URL = "https://volcanoes.usgs.gov/hans-public/api/notice/getNotice"
 
@@ -76,6 +77,10 @@ class USGSVolcanoDownloader(BaseDownloader):
     straight from the source row. Notices are immutable once published, so a
     cached entry never goes stale. Records without an identifier or volcano
     number get empty values, which the ETL turns into ``NULL``.
+
+    Each volcano point is also reverse-geocoded once into ``geocode_state``
+    (the shared lookup ``data/reverse_geocode.csv``), the subdivision the ETL
+    used to resolve itself.
     """
 
     DEFAULT_NOTICES_FILE = str(Path(__file__).resolve().parent.parent / "data" / "usgs_volcano_notices.csv")
@@ -96,8 +101,11 @@ class USGSVolcanoDownloader(BaseDownloader):
         logger: logging.Logger | None = None,
         log_folder: str | None = None,
         notices_file: str | None = None,
+        reverse_geocode_file: str | None = None,
     ):
-        super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
+        super().__init__(
+            timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
+        )
         self.notices_file = notices_file or self.DEFAULT_NOTICES_FILE
 
     @staticmethod
@@ -265,7 +273,8 @@ class USGSVolcanoDownloader(BaseDownloader):
         Only returns volcanoes with alert level above NORMAL (i.e. ADVISORY, WATCH, WARNING).
         Filters by notice_date to include only notices issued within the date range.
         The kept records are enriched with their notice details from
-        :attr:`notices_file` before returning.
+        :attr:`notices_file` and their subdivision from the reverse-geocode
+        lookup before returning.
         """
         self.logger.info(f"Downloading USGS Volcano data for {start_date.date()} to {end_date.date()}")
 
@@ -286,6 +295,7 @@ class USGSVolcanoDownloader(BaseDownloader):
                 all_records.append(record)
 
         self._resolve_notices(all_records)
+        stamp_geocode(all_records, output=self.reverse_geocode_file, columns=("geocode_state",), logger=self.logger)
 
         self.logger.info(f"Downloaded {len(all_records)} USGS Volcano records total")
         return all_records

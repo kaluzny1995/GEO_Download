@@ -4,21 +4,33 @@ import datetime as dt
 import logging
 
 from downloader.base import BaseDownloader
+from reverse_geocode import stamp_geocode
 
 
 class GDACSDownloader(BaseDownloader):
     """Downloads global natural disaster data from the GDACS API.
 
     Covers earthquakes (EQ), tropical cyclones (TC), floods (FL),
-    volcanoes (VO), wildfires (WF), and droughts (DR).
+    volcanoes (VO), wildfires (WF), and droughts (DR). Every event centroid
+    is reverse-geocoded into ``geocode_country``/``geocode_state`` (shared
+    lookup ``data/reverse_geocode.csv``), the pair the ETL uses to answer
+    alert levels the source's alpha-3 code cannot.
     """
 
     __slots__ = ("_event_types", "_page_size")
 
-    def __init__(self, timeout: int = 30, logger: logging.Logger | None = None,
-                 log_folder: str | None = None,
-                 event_types: str = "EQ;TC;FL;VO;WF;DR", page_size: int = 100):
-        super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
+    def __init__(
+        self,
+        timeout: int = 30,
+        logger: logging.Logger | None = None,
+        log_folder: str | None = None,
+        event_types: str = "EQ;TC;FL;VO;WF;DR",
+        page_size: int = 100,
+        reverse_geocode_file: str | None = None,
+    ):
+        super().__init__(
+            timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
+        )
         self._event_types = event_types
         self._page_size = page_size
 
@@ -91,5 +103,6 @@ class GDACSDownloader(BaseDownloader):
                 break
             page += 1
 
+        stamp_geocode(all_records, output=self.reverse_geocode_file, logger=self.logger)
         self.logger.info(f"Downloaded {len(all_records)} GDACS events total")
         return all_records

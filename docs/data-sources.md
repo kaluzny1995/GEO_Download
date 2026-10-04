@@ -13,12 +13,13 @@ Conventions shared by every source:
 | **Empty cell** | The value was missing or `null` in the API response. Nothing is ever written as `null`. |
 | **Date / time** | ISO-8601 exactly as the source returns it (UTC unless the table says otherwise). |
 | **Row grain** | One row per event / observation / river-day belonging to that file's date. |
+| **Stamped geocode columns** | `geocode_country` / `geocode_state` are reverse-geocoded at download time through the shared lookup `data/reverse_geocode.csv` (Nominatim/OpenStreetMap, keyed at 4 decimals ≈ 11 m) — GEO_ETL never queries the API itself. Empty means "no answer" (open ocean) or "not looked up" (the source text already answers); the per-source tables say which. |
 | **No data** | If a source returns nothing for a day, no file is written for that day. A run in which **every** requested day is empty saves no files at all and raises `RuntimeError` (`No files downloaded for <Source>`), ending the process with exit code `1`, so chained steps (ingestion) are not executed. |
 
 ## USGS Earthquake
 
-- **File:** `data/USGS_Earthquake/usgs_earthquakes_YYYY-MM-DD.csv` · 23 columns
-- **Grain:** one row per seismic event · **Provenance:** passed through unchanged from the USGS FDSN Event Query (`format=csv`), so column names/order are USGS's own.
+- **File:** `data/USGS_Earthquake/usgs_earthquakes_YYYY-MM-DD.csv` · 24 columns
+- **Grain:** one row per seismic event · **Provenance:** passed through unchanged from the USGS FDSN Event Query (`format=csv`) plus the two stamped geocode columns, so column names/order are USGS's own except at the end.
 
 | Column | Type / unit | Description |
 |--------|-------------|-------------|
@@ -44,12 +45,14 @@ Conventions shared by every source:
 | `status` | code | `automatic` = unreviewed machine solution, `reviewed` = human-analyst QC'd (`deleted` exists but is only returned with `includedeleted=only`) |
 | `locationSource` | code | Network that originally authored the lat/lon/depth (can differ from `net` when a different origin is preferred) |
 | `magSource` | code | Network that originally authored the magnitude (can differ from `net` when a different magnitude is preferred) |
+| `geocode_country` | ISO-3166 alpha-2 | Reverse-geocoded country of the epicentre, stamped only when the `place` suffix cannot answer the country — empty otherwise, because the parsed suffix wins |
+| `geocode_state` | 2-letter code | Reverse-geocoded subdivision of those same epicentres; empty when the suffix answered or the API found none (the ETL prefers `net`) |
 
 > ℹ **`magType` caveat.** `ci` is a *network* code (Southern California), not a magnitude type — magnitudes from that network usually arrive as `ml`/`md`. USGS enumerates many codes in its API without defining them, so treat unknown codes as network-specific rather than guessing.
 
 ## GDACS (Global Disasters)
 
-- **File:** `data/GDACS/gdacs_disasters_YYYY-MM-DD.csv` · 17 columns
+- **File:** `data/GDACS/gdacs_disasters_YYYY-MM-DD.csv` · 19 columns
 - **Grain:** one row per disaster event/episode · **Provenance:** flattened from the GDACS GeoJSON `features[].properties` + `geometry`.
 - **Event types:** `EQ` earthquake · `TC` tropical cyclone (hurricane/typhoon) · `FL` flood · `VO` volcanic eruption · `WF` wildfire (forest fire) · `DR` drought. Tsunamis are scored inside the `EQ` model, not published as a separate type. All GDACS timestamps are UTC but are stored **without** an offset.
 
@@ -72,10 +75,12 @@ Conventions shared by every source:
 | `source` | code | Contributing body: `NEIC`/`EMSC` (EQ) · `NOAA`/`JTWC`/`RSMC` (TC) · `GLOFAS`/`DFO` (FL) · `GWIS` (WF) · `GDO` (DR) · VAAC names (`TOKYO`, `DARWIN`, `WASHINGTON`, …) and `JRC` (VO) |
 | `report_url` | URL | GDACS report page for the event, e.g. `https://www.gdacs.org/report.aspx?eventid=1001325&episodeid=35&eventtype=TC` |
 | `is_current` | `true` / `false` | Whether GDACS still treats the event as ongoing — observed `true` only while `to_date` lies within the last ~4 days (EQ/TC/FL/WF); VO and DR records stay `false` even while still updating |
+| `geocode_country` | ISO-3166 alpha-2 | Reverse-geocoded country of the centroid — the ETL's fallback when the source's alpha-3 `country_code` is unknown; empty when the API found none (open ocean) |
+| `geocode_state` | code | Reverse-geocoded subdivision of the centroid — the ETL's `state_province` source, since GDACS carries no state of its own |
 
 ## NASA EONET (Natural Events)
 
-- **File:** `data/EONET/eonet_events_YYYY-MM-DD.csv` · 17 columns
+- **File:** `data/EONET/eonet_events_YYYY-MM-DD.csv` · 19 columns
 - **Grain:** one row per EONET event · **Provenance:** flattened from `events[]`.
 - **Categories:** `wildfires`, `severeStorms`, `floods`, `volcanoes`, `earthquakes`, `drought`, `landslides`, `seaLakeIce`, `snow`, `tempExtremes`, `dustHaze`, `manmade`, `waterColor`.
 
@@ -98,10 +103,12 @@ Conventions shared by every source:
 | `last_latitude` | degrees | Latitude of the **last** geometry (most recent fix — geometries are observed in ascending date order, though NASA doesn't document that guarantee) |
 | `last_longitude` | degrees | Longitude of the last geometry |
 | `last_date` | ISO-8601 UTC | Timestamp of the most recent geometry |
+| `geocode_country` | ISO-3166 alpha-2 | Reverse-geocoded country of the first geometry — the ETL's fallback when the description names no state; empty otherwise |
+| `geocode_state` | code | Reverse-geocoded subdivision of the first geometry — same fallback rule, empty when the API found none |
 
 ## Open-Meteo Flood (River Discharge)
 
-- **File:** `data/OpenMeteo_Flood/openmeteo_rivers_YYYY-MM-DD.csv` · 6 columns
+- **File:** `data/OpenMeteo_Flood/openmeteo_rivers_YYYY-MM-DD.csv` · 8 columns
 - **Grain:** one row per river per day · **Coverage:** 126 major rivers from `data/rivers.json` (Copernicus GloFAS model, 0.05°/~5 km grid); days with `null` discharge are skipped. Values are **modelled estimates**, not gauge measurements.
 
 | Column | Type / unit | Description |
@@ -112,10 +119,12 @@ Conventions shared by every source:
 | `longitude` | degrees | WGS84 longitude of the reference point (same grid caveat as `latitude`) |
 | `date` | `YYYY-MM-DD` | GMT+0 calendar day of the value — the GloFAS 24-h mean from 00:00 to 00:00 UTC |
 | `discharge_m3s` | m³/s | Simulated daily river discharge, 24-h mean in m³/s (e.g. `77982.05` for the Amazon) — GloFAS historical analysis + forecast, so the value is a model output, not an observation |
+| `geocode_country` | ISO-3166 alpha-2 | Reverse-geocoded country of the reference point — the ETL's fallback when the country name in `rivers.json` is unmapped; empty when the API found none |
+| `geocode_state` | code | Reverse-geocoded subdivision of the reference point, empty when the API found none |
 
 ## USGS NWIS (US Streamflow)
 
-- **File:** `data/USGS_NWIS/usgs_streamflow_YYYY-MM-DD.csv` · 9 columns
+- **File:** `data/USGS_NWIS/usgs_streamflow_YYYY-MM-DD.csv` · 11 columns
 - **Grain:** one row per gauge per day · **Defaults:** site `01646500` (Potomac River near Washington DC), parameter `00060` (discharge) — both configurable via `sites` / `parameter_code`.
 
 | Column | Type / unit | Description |
@@ -129,6 +138,7 @@ Conventions shared by every source:
 | `qualifiers` | flags | NWIS quality codes joined with `,`: `A` approved for publication · `P` provisional, subject to revision · `e` estimated · `R` revised · `p` partial record · `Bkw` backwater · `Eqp` equipment malfunction · `Rat` rating being developed · `Ssn` monitored seasonally · `ZFL` zero flow · `***` value unavailable |
 | `latitude` | degrees | Gauge latitude, decimal degrees (EPSG:4326) |
 | `longitude` | degrees | Gauge longitude, decimal degrees (EPSG:4326) |
+| `geocode_state` | code | Reverse-geocoded subdivision of the gauge point — the ETL's `state_province` (the gauge's country is fixed to `US`), empty when the API found none |
 
 ## Avalanche.org (US Avalanche Forecasts)
 
@@ -165,13 +175,13 @@ Conventions shared by every source:
 
 ## IBTrACS (Global Tropical Cyclones)
 
-- **File:** `data/IBTrACS/ibtracs_cyclones_YYYY-MM-DD.csv` · **174 columns**
+- **File:** `data/IBTrACS/ibtracs_cyclones_YYYY-MM-DD.csv` · **176 columns**
 - **Grain:** one row per cyclone position (best-track point) · **Provenance:** NOAA IBTrACS v04r01 (`last3years` by default), streamed row-by-row; the upstream *units* row (row 2) is discarded and only rows whose `ISO_TIME` falls inside the requested day are kept.
 - `ISO_TIME` is looked up **by header name**, never by a fixed column index — the live header starts `SID,SEASON,NUMBER,BASIN,SUBBASIN,NAME,ISO_TIME,…`, so any positional assumption silently filters out every row.
 - The upstream `last3years` file trails the present by 1–2 days, so the most recent days can legitimately yield no rows (and therefore no file); the next incremental run retries them.
 - Missing values are blank cells (IBTrACS's own convention).
 
-### Core columns (19)
+### Core columns (21)
 
 | Column | Unit | Description |
 |--------|------|-------------|
@@ -194,6 +204,8 @@ Conventions shared by every source:
 | `IFLAG` | 15 chars | One provenance/interpolation char per source dataset, in fixed order (USA, Tokyo, CMA, HKO, KMA, NewDelhi, Reunion, BoM, Nadi, Wellington, ds824, TD9636, TD9635, Neumann, Chenoweth): `_` none · `O` original · `P` fully interpolated · `I` intensity filled · `V` partly filled |
 | `STORM_SPEED` | knots | Translation speed derived by IBTrACS from successive `LAT`/`LON` positions |
 | `STORM_DIR` | degrees | Direction of motion, degrees clockwise from north (0–360, rounded to 5°), computed from `LAT`/`LON` |
+| `geocode_country` | ISO-3166 alpha-2 | Reverse-geocoded country of the position: fetched for rows within 100 km of land (cached answers stamped for the rest too); empty = open water / not covered (the ETL turns that into `ZZ`) |
+| `geocode_state` | code | Reverse-geocoded subdivision of the position (same lookup and distance rules), empty when none |
 
 ### Agency columns (155)
 
@@ -275,7 +287,7 @@ _File total: **174 columns** = 19 core + 155 agency._
 
 ## USGS Volcano
 
-- **File:** `data/USGS_Volcano/usgs_volcanoes_YYYY-MM-DD.csv` · 16 columns
+- **File:** `data/USGS_Volcano/usgs_volcanoes_YYYY-MM-DD.csv` · 17 columns
 - **Grain:** one row per notice for an elevated volcano · **Coverage:** only volcanoes above `NORMAL` alert (ADVISORY / WATCH / WARNING), filtered to notices issued inside the requested day.
 
 | Column | Type / unit | Description |
@@ -296,12 +308,13 @@ _File total: **174 columns** = 19 core + 155 agency._
 | `longitude` | decimal degrees | Volcano coordinate from the notice's own section (`lng`), empty when the notice reports none |
 | `region` | text | Volcano region from the notice's own section, e.g. `Aleutians` |
 | `synopsis` | text | The notice's one-line status for that volcano, e.g. `AVO Great Sitkin ORANGE/WATCH - Slow eruption of lava continues.` |
+| `geocode_state` | 2-letter code | Reverse-geocoded subdivision of the notice coordinate (shared lookup `data/reverse_geocode.csv`) — the ETL's `state_province`, `ZZ` when the geocode has none (e.g. ocean points) |
 
 > ℹ **Notice-detail lookup.** The feed only carries the notice's headline fields — coordinates, region, status line and full notice type live behind the notice endpoint and are stamped at download time through the consolidated lookup `data/usgs_volcano_notices.csv` (`notice_identifier, vnum, notice_type, latitude, longitude, region, synopsis`, one row per volcano section of a notice, sorted by key). A notice the file does not cover yet is fetched once (however many of its volcanoes appear) and persisted; notices are immutable once published, so a cached entry never goes stale. Records without an identifier or volcano number get empty values. A failed fetch or a payload without the requested section fails the download instead of leaving holes.
 
 ## NIFC (US Wildland Fires)
 
-- **File:** `data/NIFC/nifc_fires_YYYY-MM-DD.csv` · 17 columns
+- **File:** `data/NIFC/nifc_fires_YYYY-MM-DD.csv` · 18 columns
 - **Grain:** one row per fire-perimeter feature updated inside the day · **Provenance:** ArcGIS FeatureServer `attributes` from the WFIGS *Interagency Perimeters* layer — polygon geometry is not requested, but the feature **centroid** is (`returnCentroid=true`), which supplies `latitude`/`longitude`.
 
 | Column | Type / unit | Description |
@@ -323,6 +336,7 @@ _File total: **174 columns** = 19 core + 155 agency._
 | `poly_date` | epoch ms | When the source polygon record was last edited, Unix ms UTC (`poly_DateCurrent`) — the field the day query filters on |
 | `created_on` | epoch ms | When the IRWIN incident record was created (`attr_CreatedOnDateTime_dt`), Unix ms UTC |
 | `modified_on` | epoch ms | When the IRWIN incident record was last modified (`attr_ModifiedOnDateTime_dt`), Unix ms UTC — can be newer than `poly_date` |
+| `geocode_state` | 2-letter code | Reverse-geocoded subdivision of the centroid, stamped only for rows whose `state` is blank (shared lookup `data/reverse_geocode.csv`) — the ETL's fallback, empty when the source state answers |
 
 > ℹ **Layer-specific field names.** On the *Perimeters* layer `poly_*` are perimeter
 > attributes and `attr_*` are incident attributes mirrored onto each perimeter — every

@@ -452,3 +452,45 @@ class TestResolveNotices:
         downloader._resolve_notices([])
 
         assert downloader._load_notices() == {}
+
+
+def test_download_stamps_geocode_state(tmp_path):
+    """Every notice coordinate is reverse-geocoded into geocode_state."""
+    lookup = str(tmp_path / "reverse_geocode.csv")
+    downloader = USGSVolcanoDownloader(
+        logger=MockLogger(),
+        notices_file=str(tmp_path / "usgs_volcano_notices.csv"),
+        reverse_geocode_file=lookup,
+    )
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = [
+        {
+            "volcano_name": "Great Sitkin",
+            "vnum": "1203-01-",
+            "obs_abbr": "AVO",
+            "alert_level": "ADVISORY",
+            "color_code": "YELLOW",
+            "notice_type_cd": "VONA",
+            "notice_identifier": "VOA030",
+            "sent_utc": "2026-09-09T14:30:00Z",
+            "notice_url": "https://example.com/volcano",
+        }
+    ]
+    mock_response.raise_for_status = MagicMock()
+    payload = {
+        "notice_type": "Volcano Activity Notification",
+        "notice_sections": [
+            {"vnum": "1203-01-", "lat": 52.0765, "lng": -176.1109, "region": "Aleutians", "synopsis": "first"},
+        ],
+    }
+
+    with (
+        patch.object(downloader.session, "get", return_value=mock_response),
+        patch.object(downloader, "_fetch_notice", return_value=payload),
+    ):
+        result = downloader.download_by_date_range(TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 17))
+
+    assert len(result) == 1
+    assert result[0]["geocode_state"] == "MT"
+    assert "geocode_country" not in result[0]

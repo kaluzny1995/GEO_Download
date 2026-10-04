@@ -3,13 +3,17 @@ from __future__ import annotations
 import datetime as dt
 
 from downloader.base import BaseDownloader
+from reverse_geocode import stamp_geocode
 
 
 class EONETDownloader(BaseDownloader):
     """Downloads natural event data from NASA EONET (Earth Observatory Natural Event Tracker).
 
     Covers wildfires, storms, floods, volcanoes, earthquakes, drought,
-    landslides, sea ice, temperature extremes, and more.
+    landslides, sea ice, temperature extremes, and more. Every event
+    coordinate is reverse-geocoded into ``geocode_country``/``geocode_state``
+    (shared lookup ``data/reverse_geocode.csv``), the pair the ETL used to
+    resolve itself.
     """
 
     def _build_record(self, event: dict) -> dict:
@@ -75,11 +79,7 @@ class EONETDownloader(BaseDownloader):
         """
         self.logger.info(f"Downloading EONET events for {start_date.date()} to {end_date.date()}")
 
-        url = (
-            f"{base_url}"
-            f"?start={self._format_date(start_date)}"
-            f"&end={self._format_date(end_date)}"
-        )
+        url = f"{base_url}?start={self._format_date(start_date)}&end={self._format_date(end_date)}"
 
         data = self._get_json(url)
         data = self._validate_dict_response(data, "EONET")
@@ -89,4 +89,6 @@ class EONETDownloader(BaseDownloader):
         events = data.get("events", [])
         self.logger.info(f"Downloaded {len(events)} EONET events")
 
-        return [self._build_record(event) for event in events]
+        records = [self._build_record(event) for event in events]
+        stamp_geocode(records, output=self.reverse_geocode_file, logger=self.logger)
+        return records

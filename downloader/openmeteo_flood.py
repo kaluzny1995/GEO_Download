@@ -6,21 +6,31 @@ import logging
 from pathlib import Path
 
 from downloader.base import BaseDownloader
+from reverse_geocode import stamp_geocode
 
 
 class OpenMeteoFloodDownloader(BaseDownloader):
     """Downloads river discharge data from the Open-Meteo Flood API (GloFAS).
 
     Queries daily river discharge (m3/s) for a list of major world rivers
-    defined in data/rivers.json.
+    defined in data/rivers.json. Every river point is reverse-geocoded into
+    ``geocode_country``/``geocode_state`` (shared lookup
+    ``data/reverse_geocode.csv``), the pair the ETL used to resolve itself.
     """
 
     DEFAULT_RIVERS_FILE = str(Path(__file__).resolve().parent.parent / "data" / "rivers.json")
 
-    def __init__(self, timeout: int = 30, logger: logging.Logger | None = None,
-                 log_folder: str | None = None,
-                 rivers_file: str | None = None):
-        super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
+    def __init__(
+        self,
+        timeout: int = 30,
+        logger: logging.Logger | None = None,
+        log_folder: str | None = None,
+        rivers_file: str | None = None,
+        reverse_geocode_file: str | None = None,
+    ):
+        super().__init__(
+            timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
+        )
         self._rivers_file = rivers_file or self.DEFAULT_RIVERS_FILE
         self._rivers = self._load_rivers()
 
@@ -53,14 +63,16 @@ class OpenMeteoFloodDownloader(BaseDownloader):
         for date_str, discharge in zip(times, discharges, strict=False):
             if discharge is None:
                 continue
-            records.append({
-                "river_name": river["name"],
-                "country": river["country"],
-                "latitude": river["latitude"],
-                "longitude": river["longitude"],
-                "date": date_str,
-                "discharge_m3s": discharge,
-            })
+            records.append(
+                {
+                    "river_name": river["name"],
+                    "country": river["country"],
+                    "latitude": river["latitude"],
+                    "longitude": river["longitude"],
+                    "date": date_str,
+                    "discharge_m3s": discharge,
+                }
+            )
         return records
 
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
@@ -85,6 +97,7 @@ class OpenMeteoFloodDownloader(BaseDownloader):
             if i % 20 == 0:
                 self.logger.info(f"  Progress: {i}/{len(self._rivers)} rivers queried")
 
+        stamp_geocode(all_records, output=self.reverse_geocode_file, logger=self.logger)
         self.logger.info(
             f"Downloaded {len(all_records)} discharge records from {rivers_with_data}/{len(self._rivers)} rivers"
         )

@@ -57,7 +57,7 @@ The architecture is extensible: new data sources can be added by implementing a 
 
 | Document | Contents |
 |----------|----------|
-| [Data sources](docs/data-sources.md) | Every CSV the app produces — file pattern, row grain and a field-by-field description of all 9 sources (174 IBTrACS columns included). |
+| [Data sources](docs/data-sources.md) | Every CSV the app produces — file pattern, row grain and a field-by-field description of all 9 sources (176 IBTrACS columns included). |
 | [Configuration](docs/configuration.md) | Full `config.json` reference — per-source settings, dates, output folders. |
 | [Architecture](docs/architecture.md) | Project layout and how to add a new data source in 4 steps. |
 | [Development](docs/development.md) | Running the tests, Ruff lint/format, tox environments and PyCharm integration. |

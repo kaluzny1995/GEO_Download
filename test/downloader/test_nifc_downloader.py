@@ -217,9 +217,7 @@ def test_download_by_date_range_connection_error():
     downloader = NIFCDownloader(logger=logger)
 
     with patch.object(downloader.session, "get", side_effect=requests.exceptions.ConnectionError("Connection refused")):
-        result = downloader.download_by_date_range(
-            TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2)
-        )
+        result = downloader.download_by_date_range(TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2))
 
     assert result == []
     assert any("Failed to fetch" in msg for _, msg in logger.messages)
@@ -511,3 +509,28 @@ class TestResolveUnitNames:
 
         assert records[0]["unit_name"] == "Fresh Code"
         assert dl._load_unit_names()["WAOWF"] == "Fresh Name"
+
+
+def test_download_stamps_geocode_state_for_stateless_rows(tmp_path):
+    """Blank-state rows are stamped; stateful rows keep an empty geocode_state."""
+    lookup = str(tmp_path / "reverse_geocode.csv")
+    downloader = NIFCDownloader(logger=MockLogger(), reverse_geocode_file=lookup)
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "features": [
+            {"attributes": {"poly_IncidentName": "Stateless"}, "centroid": {"x": -105.0, "y": 40.0}},
+            {
+                "attributes": {"poly_IncidentName": "Stateful", "attr_POOState": "US-WY"},
+                "centroid": {"x": -106.0, "y": 41.0},
+            },
+        ]
+    }
+    mock_response.raise_for_status = MagicMock()
+
+    with patch.object(downloader.session, "get", return_value=mock_response):
+        result = downloader.download_by_date_range(TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2))
+
+    assert result[0]["geocode_state"] == "MT"
+    assert "geocode_country" not in result[0]
+    assert result[1]["geocode_state"] == ""

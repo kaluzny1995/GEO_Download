@@ -8,6 +8,25 @@ import logging
 import requests
 
 from downloader.base import BaseDownloader
+from reverse_geocode import stamp_geocode
+
+GEOCODE_DISTANCE_KM = 100
+
+
+def _near_land(record: dict) -> bool:
+    """Whether the row sits within :data:`GEOCODE_DISTANCE_KM` of land.
+
+    Mirrors the ETL's comparison, which reads ``dist2land`` after the
+    raw2plain integer cast — ``"100.9"`` counts as near-land there, so the
+    truncation happens here too. Blank or unusable distances never match.
+    """
+    value = str(record.get("DIST2LAND") or "").strip()
+    if not value:
+        return False
+    try:
+        return int(float(value)) <= GEOCODE_DISTANCE_KM
+    except ValueError:
+        return False
 
 
 class IBTrACSDownloader(BaseDownloader):
@@ -20,16 +39,29 @@ class IBTrACSDownloader(BaseDownloader):
 
     Memory-optimised: streams the CSV line-by-line and filters rows during
     the stream so the full multi-hundred-MB dataset is never held in memory.
+
+    Every row's point is stamped with ``geocode_country``/``geocode_state``
+    (shared lookup ``data/reverse_geocode.csv``): only rows within
+    :data:`GEOCODE_DISTANCE_KM` of land may query the API — an open-ocean
+    coordinate always answers with no country anyway — but cached answers of
+    far rows are stamped too, which is exactly what the ETL used to embed.
     """
 
     ISO_TIME_COLUMN = "ISO_TIME"
 
     __slots__ = ("_dataset",)
 
-    def __init__(self, timeout: int = 60, logger: logging.Logger | None = None,
-                 log_folder: str | None = None,
-                 dataset: str = "last3years"):
-        super().__init__(timeout=timeout, logger=logger, log_folder=log_folder)
+    def __init__(
+        self,
+        timeout: int = 60,
+        logger: logging.Logger | None = None,
+        log_folder: str | None = None,
+        dataset: str = "last3years",
+        reverse_geocode_file: str | None = None,
+    ):
+        super().__init__(
+            timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
+        )
         self._dataset = dataset
 
     def _build_url(self, base_url: str) -> str:
@@ -57,8 +89,7 @@ class IBTrACSDownloader(BaseDownloader):
         """True when `value` looks like a YYYY-MM-DD date."""
         return len(value) == 10 and value[4] == "-" and value[7] == "-"
 
-    def download_by_date_range(self, base_url: str, start_date: dt.datetime,
-                               end_date: dt.datetime) -> list[dict]:
+    def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Download IBTrACS tropical cyclone data for the given date range.
 
         Streams the CSV response line-by-line, skipping the units row (row 2),
@@ -101,8 +132,7 @@ class IBTrACSDownloader(BaseDownloader):
                     iso_time_index = self._column_index(header, self.ISO_TIME_COLUMN)
                     if iso_time_index < 0:
                         self.logger.error(
-                            f"IBTrACS header has no {self.ISO_TIME_COLUMN} column. "
-                            f"First columns: {header[:8]}"
+                            f"IBTrACS header has no {self.ISO_TIME_COLUMN} column. First columns: {header[:8]}"
                         )
                         return []
                     continue
@@ -126,6 +156,15 @@ class IBTrACSDownloader(BaseDownloader):
                     kept_count += 1
 
             self.logger.info(f"Scanned {row_count} rows, kept {kept_count} records for the date range")
+            stamp_geocode(
+                filtered,
+                output=self.reverse_geocode_file,
+                latitude_key="LAT",
+                longitude_key="LON",
+                fetch_filter=_near_land,
+                embed_all=True,
+                logger=self.logger,
+            )
             return filtered
         finally:
             response.close()

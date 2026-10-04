@@ -188,3 +188,20 @@ def test_build_record_missing_geometry():
     assert record["geometry_count"] == 0
     assert record["category_id"] == ""
     assert record["source_id"] == ""
+
+
+def test_download_stamps_geocode_country_and_state(tmp_path):
+    """Every event coordinate is reverse-geocoded into the stamped pair."""
+    lookup = str(tmp_path / "reverse_geocode.csv")
+    downloader = EONETDownloader(logger=MockLogger(), reverse_geocode_file=lookup)
+
+    with patch.object(BaseDownloader, "_get_json", return_value={"events": SAMPLE_EVENTS}):
+        result = downloader.download_by_date_range(
+            "https://ignored.com",
+            dt.datetime(2026, 9, 1),
+            dt.datetime(2026, 9, 30),
+        )
+
+    assert len(result) == 3
+    assert all(record["geocode_country"] == "US" for record in result)
+    assert all(record["geocode_state"] == "MT" for record in result)
