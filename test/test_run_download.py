@@ -17,11 +17,24 @@ class StubDownloader:
         """Map YYYY-MM-DD (or default) to the records the download should return."""
         self.results = results or {}
         self.calls: list[tuple[str, dt.datetime, dt.datetime]] = []
+        self.auxiliary_calls: list[str] = []
 
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Record the call and return the scripted records for that day."""
         self.calls.append((base_url, start_date, end_date))
         return self.results.get(start_date.strftime("%Y-%m-%d"), [])
+
+    def ensure_auxiliary_files(self, api_url: str) -> None:
+        """Record the hook call — the real downloaders build their ETL references here."""
+        self.auxiliary_calls.append(api_url)
+
+
+class FailingAuxiliaryDownloader(StubDownloader):
+    """Stub whose reference files cannot be created."""
+
+    def ensure_auxiliary_files(self, api_url: str) -> None:
+        """Fail the way a full disk or an unreachable API would."""
+        raise OSError("no space left on device")
 
 
 def _source(output_folder: str) -> SourceConfig:
@@ -122,6 +135,57 @@ def test_download_source_raises_when_nothing_downloaded(tmp_path) -> None:
     assert ("WARNING", f"No data to save for {load_params.date_from.strftime('%Y-%m-%d')}.") in logger.messages
     assert any(level == "ERROR" and "No files downloaded for IBTrACS" in msg for level, msg in logger.messages)
     assert ("INFO", "Done.") not in logger.messages
+
+
+def test_download_source_builds_auxiliary_files_after_the_run(tmp_path) -> None:
+    """With files written the downloader gets to create the references the ETL joins."""
+    # Arrange
+    source = _source(str(tmp_path))
+    load_params = _load_params(str(tmp_path))
+    day = load_params.date_from.strftime("%Y-%m-%d")
+    downloader = StubDownloader({day: [{"ISO_TIME": f"{day} 06:00:00"}]})
+    logger = MockLogger()
+
+    # Act
+    download_source(source, "IBTrACS", load_params, downloader, logger)
+
+    # Assert
+    assert downloader.auxiliary_calls == ["https://example.test/csv"]
+    assert ("INFO", "Done.") in logger.messages
+
+
+def test_download_source_skips_auxiliary_files_when_nothing_downloaded(tmp_path) -> None:
+    """A run that wrote no CSV never reaches the reference files."""
+    # Arrange
+    source = _source(str(tmp_path))
+    load_params = _load_params(str(tmp_path))
+    downloader = StubDownloader()
+    logger = MockLogger()
+
+    # Act & Assert
+    with pytest.raises(RuntimeError, match="No files downloaded for IBTrACS"):
+        download_source(source, "IBTrACS", load_params, downloader, logger)
+
+    assert downloader.auxiliary_calls == []
+
+
+def test_download_source_keeps_going_when_auxiliary_files_fail(tmp_path) -> None:
+    """The day CSVs are written already, so a failing reference is logged, not raised."""
+    # Arrange
+    source = _source(str(tmp_path))
+    load_params = _load_params(str(tmp_path))
+    day = load_params.date_from.strftime("%Y-%m-%d")
+    downloader = FailingAuxiliaryDownloader({day: [{"ISO_TIME": f"{day} 06:00:00"}]})
+    logger = MockLogger()
+
+    # Act
+    result = download_source(source, "IBTrACS", load_params, downloader, logger)
+
+    # Assert
+    assert result is None
+    assert (tmp_path / f"ibtracs_cyclones_{day}.csv").exists()
+    assert any(level == "ERROR" and "Auxiliary files of IBTrACS" in msg for level, msg in logger.messages)
+    assert ("INFO", "Done.") in logger.messages
 
 
 def test_main_returns_zero_when_nothing_to_download(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

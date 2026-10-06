@@ -74,8 +74,8 @@ Current state: `ruff check .` → **0 findings**. `ruff format --check .` still 
 |---------|-----------|--------|
 | `tox` | default gate = `lint` + `py311` | ✅ |
 | `tox -e lint` | `ruff check --output-format=concise .` | ✅ |
-| `tox -e py311` | full pytest suite (200 tests) | ✅ |
-| `tox -e typecheck` | `mypy model downloader downloader_factory.py util.py run_download.py reverse_geocode.py` | ✅ |
+| `tox -e py311` | full pytest suite (235 tests) | ✅ |
+| `tox -e typecheck` | `mypy model downloader downloader_factory.py util.py run_download.py run_openmeteo_thresholds.py reverse_geocode.py` | ✅ |
 | `tox -e warnings` | `pytest -W error::DeprecationWarning` | ✅ |
 | `tox -e format` | `ruff format --check .` | ❌ 11 files (see above) |
 | `tox -e format-fix` | `ruff format .` — writes the changes | – |

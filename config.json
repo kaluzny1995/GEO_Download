@@ -43,7 +43,8 @@
       "output_file_pattern": "openmeteo_rivers_{date}.csv",
       "is_date_to_previous_day": true,
       "params": {
-        "rivers_file": "data/rivers.json"
+        "rivers_file": "data/rivers.json",
+        "thresholds_file": "data/openmeteo_discharge_thresholds.csv"
       }
     },
     "USGS_NWIS": {

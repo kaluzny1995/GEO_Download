@@ -80,7 +80,8 @@ def save_csv(data: list[dict], output_folder: str, output_file_pattern: str,
 
 def download_source(source: SourceConfig, source_name: str, load_params: LoadParams,
                     dl: BaseDownloader, logger: logging.Logger) -> None:
-    """ Downloads every day of the load range and saves it as CSV.
+    """ Downloads every day of the load range and saves it as CSV, then asks the
+    downloader for its auxiliary files (source-specific references the ETL joins).
 
     Raises RuntimeError when the run produced no files at all (nothing to
     ingest) — the process then ends with exit code 1, which stops the chain
@@ -106,6 +107,15 @@ def download_source(source: SourceConfig, source_name: str, load_params: LoadPar
                    "nothing to ingest.")
         logger.error(message)
         raise RuntimeError(message)
+
+    # Reference files the ETL joins next to the day CSVs (best effort: the data of this run
+    # is written already, so a failure here is logged instead of failing the download).
+    try:
+        dl.ensure_auxiliary_files(source.api_url)
+    except Exception as error:
+        message = f"Auxiliary files of {source_name} could not be created: {error}"
+        logger.error(message)
+        print(f"ERROR: {message}", flush=True)
 
     print("\nDone.")
     logger.info("Done.")

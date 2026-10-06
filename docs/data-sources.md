@@ -108,8 +108,8 @@ Conventions shared by every source:
 
 ## Open-Meteo Flood (River Discharge)
 
-- **File:** `data/OpenMeteo_Flood/openmeteo_rivers_YYYY-MM-DD.csv` · 8 columns
-- **Grain:** one row per river per day · **Coverage:** 126 major rivers from `data/rivers.json` (Copernicus GloFAS model, 0.05°/~5 km grid); days with `null` discharge are skipped. Values are **modelled estimates**, not gauge measurements.
+- **File:** `data/OpenMeteo_Flood/openmeteo_rivers_YYYY-MM-DD.csv` · 12 columns
+- **Grain:** one row per river per day · **Coverage:** 126 major rivers from `data/rivers.json` (Copernicus GloFAS model, 0.05°/~5 km grid); days with `null` discharge are skipped. Values are **modelled estimates**, not gauge measurements. Each file holds the analysis day plus the next day's forecast; the four `discharge_*_m3s` ensemble statistics are filled on forecast days only.
 
 | Column | Type / unit | Description |
 |--------|-------------|-------------|
@@ -119,8 +119,14 @@ Conventions shared by every source:
 | `longitude` | degrees | WGS84 longitude of the reference point (same grid caveat as `latitude`) |
 | `date` | `YYYY-MM-DD` | GMT+0 calendar day of the value — the GloFAS 24-h mean from 00:00 to 00:00 UTC |
 | `discharge_m3s` | m³/s | Simulated daily river discharge, 24-h mean in m³/s (e.g. `77982.05` for the Amazon) — GloFAS historical analysis + forecast, so the value is a model output, not an observation |
+| `discharge_mean_m3s` | m³/s | GloFAS ensemble **mean** of the forecast days of this file — filled only while `date` is still a forecast of today's run, empty otherwise |
+| `discharge_median_m3s` | m³/s | GloFAS ensemble **median**, same forecast-only rule |
+| `discharge_p25_m3s` | m³/s | GloFAS ensemble 25th percentile, same forecast-only rule |
+| `discharge_p75_m3s` | m³/s | GloFAS ensemble 75th percentile, same forecast-only rule |
 | `geocode_country` | ISO-3166 alpha-2 | Reverse-geocoded country of the reference point — the ETL's fallback when the country name in `rivers.json` is unmapped; empty when the API found none |
 | `geocode_state` | code | Reverse-geocoded subdivision of the reference point, empty when the API found none |
+
+- **Threshold reference:** `data/openmeteo_discharge_thresholds.csv` · 11 columns · one row per river — the p50/p90/p95/p99 discharge percentiles of a baseline window (default `2026-09-01` … today, the same span the daily files cover, minimum 30 valid days; `--baseline-start` / `--min-days` widen it) computed from one Flood API request per river. `run_download.py` **creates it when it is missing** (`params.thresholds_file` in `config.json` names the path) and leaves an existing file alone; `python run_openmeteo_thresholds.py` is how you *refresh* it — it resumes from the rows already on disk and `--restart` starts over. Joined by GEO_ETL on `river_name` + `country` to fill `danger_rating` and `other_metrics` in `geo.openmeteo_flood_etl`.
 
 ## USGS NWIS (US Streamflow)
 

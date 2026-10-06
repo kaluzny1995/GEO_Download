@@ -35,6 +35,7 @@ The architecture is extensible: new data sources can be added by implementing a 
 - **Abstract base class** — `BaseDownloader` provides shared session setup, JSON fetching, and CSV parsing; new sources only implement `download_by_date_range()`.
 - **Factory/Registry pattern** — new data sources are added via self-registering downloader classes.
 - **Reverse-geocode stamping** — `geocode_country` / `geocode_state` are reverse-geocoded at download time by `reverse_geocode.py` and appended to the downloaded CSVs through the shared lookup `data/reverse_geocode.csv`, so GEO_ETL never queries the geocoding API itself; the [Data sources](docs/data-sources.md) tables say which columns each source gets.
+- **Threshold reference** — `run_openmeteo_thresholds.py` pulls each river's baseline window in one request and writes its discharge percentiles (p50/p90/p95/p99) to `data/openmeteo_discharge_thresholds.csv`, the baseline GEO_ETL joins on every day to fill `danger_rating` and `other_metrics`; `run_download.py OpenMeteo_Flood` creates the file when it is missing and leaves it alone afterwards.
 - **Frozen Pydantic models** — all configuration and parameter objects are immutable.
 - **Structured logging** — each run produces a timestamped log file under `logs/<SourceName>/`.
 - **Fails on an empty run** — a run exits `0` only when at least one CSV was written (or the local data is already current); a run that requested days but saved nothing raises `RuntimeError` (traceback, exit code `1`), so a chained pipeline (GEO_E2E) stops instead of ingesting stale files.
@@ -150,6 +151,12 @@ python run_download.py EONET
 
 ```bash
 python run_download.py OpenMeteo_Flood
+```
+
+The download above already builds `data/openmeteo_discharge_thresholds.csv` when it is missing; refresh the reference whenever the window grows:
+
+```bash
+python run_openmeteo_thresholds.py
 ```
 
 **US streamflow (USGS NWIS):**

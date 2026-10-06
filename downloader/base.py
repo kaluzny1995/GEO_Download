@@ -63,6 +63,19 @@ class BaseDownloader(abc.ABC):
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Download data for a specific date range. Returns list of record dicts."""
 
+    def ensure_auxiliary_files(self, api_url: str) -> None:
+        """Create the reference files this source needs beside its day CSVs.
+
+        Called by ``run_download`` once the CSVs of the range are written —
+        for sources whose ETL joins extra data this is where that reference
+        is built when it is missing. The default does nothing: most sources
+        only produce CSVs.
+
+        Args:
+            api_url: The endpoint configured for this source.
+        """
+        return None
+
     @staticmethod
     def _format_date(date: dt.datetime) -> str:
         """Format datetime as YYYY-MM-DD string."""

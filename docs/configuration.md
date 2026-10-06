@@ -50,7 +50,8 @@ The application is configured via `config.json`. Each data source is defined und
       "output_file_pattern": "openmeteo_rivers_{date}.csv",
       "is_date_to_previous_day": true,
       "params": {
-        "rivers_file": "data/rivers.json"
+        "rivers_file": "data/rivers.json",
+        "thresholds_file": "data/openmeteo_discharge_thresholds.csv"
       }
     },
     "USGS_NWIS": {
@@ -146,6 +147,7 @@ Unknown keys raise `TypeError` when the downloader is constructed (the chain abo
 | `GDACS` | `event_types` | `str` — `EQ;TC;FL;VO;WF;DR` | `;`-separated GDACS event codes to fetch. |
 | `GDACS` | `page_size` | `int` — `100` | Events per API page (the downloader pages until exhausted). |
 | `OpenMeteo_Flood` | `rivers_file` | `str` — `data/rivers.json` | Rivers reference file used to build the query. |
+| `OpenMeteo_Flood` | `thresholds_file` | `str` — `data/openmeteo_discharge_thresholds.csv` | Discharge threshold reference GEO_ETL joins; the download builds it when missing, `run_openmeteo_thresholds.py` refreshes it. |
 | `USGS_NWIS` | `sites` | `str` — `01646500` | Gauge site ID(s) sent as the `sites=` query parameter. |
 | `USGS_NWIS` | `parameter_code` | `str` — `00060` | Parameter code sent as `parameterCd=` (`00060` = discharge, cfs). |
 | `IBTrACS` | `dataset` | `str` — `last3years` | IBTrACS dataset slice to download. |
