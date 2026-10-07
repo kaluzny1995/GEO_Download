@@ -25,6 +25,7 @@ Tests cover:
 - **NIFC downloader** — ArcGIS FeatureServer query, `outFields`/centroid handling, ArcGIS error-payload detection, date/time filtering, unit-name lookup maintenance (`data/nifc_unit_names.csv`, refresh when the data carries an unknown code) and `unit_name` stamping with raw-code fallback.
 - **Reverse geocoding** — `reverse_geocode.py` (coordinate keying, Nominatim response parsing, lookup round-trip, strict fetch-then-persist) and `stamp_geocode()` across the eight geocoding downloaders: appended column placement, per-source fetch filters (blank `state`, unknown `place` suffix, `DIST2LAND ≤ 100` with cached far-row answers), failed-fetch propagation, and test isolation — a missing point in a test must never reach the real API or extend the repository's lookup.
 - **Avalanche downloader** — GeoJSON record building, area weighted zone polygon centroid (holes subtracted), notices lookup merge keyed zone name + state (keeps zones that leave the feed, skips records without geometry).
+- **Source inventory** — `run_source_counts.py` (record counting with the csv parser, per-source file/record totals, missing folders, the `source_counts.csv` output and the README section between the `source_counts` markers).
 - **Run orchestration** — `save_csv()` (file written / no data / failed write) and the [failure contract](architecture.md#exit-codes) of `download_source()` and `main()` (files saved → returns normally, no files → `RuntimeError`, local data already current → `0`).
 
 
@@ -74,8 +75,8 @@ Current state: `ruff check .` → **0 findings**. `ruff format --check .` still 
 |---------|-----------|--------|
 | `tox` | default gate = `lint` + `py311` | ✅ |
 | `tox -e lint` | `ruff check --output-format=concise .` | ✅ |
-| `tox -e py311` | full pytest suite (268 tests) | ✅ |
-| `tox -e typecheck` | `mypy model downloader downloader_factory.py util.py run_download.py run_openmeteo_thresholds.py reverse_geocode.py` | ✅ |
+| `tox -e py311` | full pytest suite (305 tests) | ✅ |
+| `tox -e typecheck` | `mypy model downloader downloader_factory.py util.py run_download.py run_openmeteo_thresholds.py run_source_counts.py reverse_geocode.py` | ✅ |
 | `tox -e warnings` | `pytest -W error::DeprecationWarning` | ✅ |
 | `tox -e format` | `ruff format --check .` | ❌ 11 files (see above) |
 | `tox -e format-fix` | `ruff format .` — writes the changes | – |

@@ -27,6 +27,31 @@ All sources support two loading modes:
 
 The architecture is extensible: new data sources can be added by implementing a downloader class that inherits from `BaseDownloader`, without modifying the core orchestration logic.
 
+## Data inventory
+
+How much data sits under `data/` right now — the number of daily CSV files each source has downloaded and the total number of records inside them (the folder is gitignored, so this is a snapshot from the last regeneration).
+
+```bash
+python run_source_counts.py
+```
+
+The script counts every source of `config.json`, writes the rows to [source_counts.csv](source_counts.csv) and rewrites the table below between the `source_counts` markers, so the README and the CSV always agree:
+
+<!-- source_counts:start -->
+| Source | Files | Records |
+|--------|------:|--------:|
+| USGS_Earthquake | 33 | 9,783 |
+| GDACS | 33 | 9,720 |
+| EONET | 32 | 177 |
+| OpenMeteo_Flood | 33 | 7,326 |
+| USGS_NWIS | 33 | 54 |
+| Avalanche_ORG | 33 | 5,494 |
+| IBTrACS | 31 | 948 |
+| USGS_Volcano | 20 | 56 |
+| NIFC | 32 | 247 |
+| **Total** | **280** | **33,805** |
+<!-- source_counts:end -->
+
 ## Features
 
 - **Automated date management** — automatically determines historical vs incremental mode by scanning the output folder for existing files.
@@ -37,6 +62,7 @@ The architecture is extensible: new data sources can be added by implementing a 
 - **Reverse-geocode stamping** — `geocode_country` / `geocode_state` are reverse-geocoded at download time by `reverse_geocode.py` and appended to the downloaded CSVs through the shared lookup `data/reverse_geocode.csv`, so GEO_ETL never queries the geocoding API itself; the [Data sources](docs/data-sources.md) tables say which columns each source gets.
 - **Threshold reference** — `run_openmeteo_thresholds.py` pulls each river's baseline window in one request and writes its discharge percentiles (p50/p90/p95/p99) to `data/openmeteo_discharge_thresholds.csv`, the baseline GEO_ETL joins on every day to fill `danger_rating` and `other_metrics`; `run_download.py OpenMeteo_Flood` creates the file when it is missing and leaves it alone afterwards.
 - **Frozen Pydantic models** — all configuration and parameter objects are immutable.
+- **Data inventory** — `run_source_counts.py` counts the files and records every source has under `data/`, writes them to [source_counts.csv](source_counts.csv) and refreshes the [Data inventory](#data-inventory) table in this README.
 - **Structured logging** — each run produces a timestamped log file under `logs/<SourceName>/`.
 - **Fails on an empty run** — a run exits `0` only when at least one CSV was written (or the local data is already current); a run that requested days but saved nothing raises `RuntimeError` (traceback, exit code `1`), so a chained pipeline (GEO_E2E) stops instead of ingesting stale files.
 - **CLI interface** — source selection via command-line arguments.

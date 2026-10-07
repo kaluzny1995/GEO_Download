@@ -8,7 +8,9 @@
 GEO_Download/
 ├── run_download.py            # Entry point — CLI parsing, orchestration, CSV saving, exit codes
 ├── run_openmeteo_thresholds.py # GloFAS baseline percentiles → data/openmeteo_discharge_thresholds.csv (threshold reference for GEO_ETL; run_download builds it when missing)
+├── run_source_counts.py      # Data inventory — files/records per source → source_counts.csv + the README table
 ├── config.json                # Data source configuration
+├── source_counts.csv          # Generated cardinalities (source, files, records) — rewritten by run_source_counts.py
 ├── downloader_factory.py      # Factory/registry for downloader classes
 ├── util.py                    # Logger setup, date range generator, file date detection
 ├── reverse_geocode.py         # Reverse geocoding — shared geocode_country/geocode_state lookup (used by downloader/base.py)
@@ -42,6 +44,7 @@ GEO_Download/
 │   ├── test_openmeteo_thresholds.py
 │   ├── test_reverse_geocode.py
 │   ├── test_run_download.py
+│   ├── test_source_counts.py
 │   ├── test_util.py
 │   └── downloader/            # Per-downloader tests (a pytest subpackage)
 │       ├── __init__.py
