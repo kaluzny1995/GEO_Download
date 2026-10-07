@@ -67,6 +67,7 @@ GEO_Download/
 │   ├── USGS_Volcano/
 │   ├── NIFC/
 │   ├── openmeteo_discharge_thresholds.csv  # Per-river GloFAS baseline percentiles (p50/p90/p95/p99) — created by run_download.py when missing, refreshed by run_openmeteo_thresholds.py
+│   ├── usgs_flood_categories.csv  # NWS flood stage thresholds per gauge (action/minor/moderate/major) — kept present by run_download.py
 │   ├── rivers.json            # River definitions (126 major world rivers)
 │   ├── avalanche_org_notices.csv  # Avalanche zone centroid lookup (place_location, state, latitude, longitude)
 │   ├── nifc_unit_names.csv    # NIFC jurisdiction unit lookup (unit_code, unit_name)
@@ -107,6 +108,6 @@ The base class provides shared infrastructure (session with retry, `_get_json()`
 | `2` | CLI usage error (unknown or disabled source) — argparse | usage message |
 | `1` | Any other unhandled exception in a downloader | traceback |
 
-After the CSVs are written (and only then) `download_source()` calls the downloader's `ensure_auxiliary_files()` hook — a no-op in `BaseDownloader`, overridden by `OpenMeteo_Flood` to build `data/openmeteo_discharge_thresholds.csv` when it is missing, so GEO_ETL's `danger_rating` / `other_metrics` are filled from the first run. It is deliberately best effort: a failure there is logged as `ERROR Auxiliary files of <Source> … could not be created` and the run still exits `0`, because the day's data is already on disk; the next run then tries again.
+After the CSVs are written (and only then) `download_source()` calls the downloader's `ensure_auxiliary_files()` hook — a no-op in `BaseDownloader`, overridden by `OpenMeteo_Flood` to build `data/openmeteo_discharge_thresholds.csv` when it is missing and by `USGS_NWIS` to add any configured gauge missing from `data/usgs_flood_categories.csv`, so GEO_ETL's `danger_rating` / `other_metrics` are filled from the first run. It is deliberately best effort: a failure there is logged as `ERROR Auxiliary files of <Source> … could not be created` and the run still exits `0`, because the day's data is already on disk; the next run then tries again.
 
 In GEO_E2E a non-zero code is handled by the two `jobs.json` flags of that job — `is_failed_if_error: true` logs `ERROR DOWNLOAD job for "<source>" exited with return code 1` and raises (Celery task FAILURE); the shipped value is `is_failed_if_error: false` + `is_stop_if_error: true`, which only logs `WARNING … — next jobs will not be executed` and keeps the task SUCCESS. Either way `INGESTION` / `DATA_QUALITY` never start. That is what keeps a stale upstream feed (e.g. IBTrACS, whose `last3years` file updates with a delay) from triggering an ingestion of files that did not change.

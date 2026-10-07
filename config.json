@@ -50,14 +50,17 @@
     "USGS_NWIS": {
       "type": "usgs_nwis",
       "enabled": true,
-      "api_url": "https://waterservices.usgs.gov/nwis/dv/",
+      "api_url": "https://waterservices.usgs.gov/nwis/iv/",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_NWIS",
       "output_file_pattern": "usgs_streamflow_{date}.csv",
       "is_date_to_previous_day": true,
       "params": {
         "sites": "01646500",
-        "parameter_code": "00060"
+        "parameter_code": "00060",
+        "stage_parameter_code": "00065",
+        "nwps_api_url": "https://api.water.noaa.gov/nwps/v1/gauges",
+        "flood_categories_file": "data/usgs_flood_categories.csv"
       }
     },
     "Avalanche_ORG": {

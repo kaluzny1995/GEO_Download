@@ -57,14 +57,17 @@ The application is configured via `config.json`. Each data source is defined und
     "USGS_NWIS": {
       "type": "usgs_nwis",
       "enabled": true,
-      "api_url": "https://waterservices.usgs.gov/nwis/dv/",
+      "api_url": "https://waterservices.usgs.gov/nwis/iv/",
       "start_date": "2026-09-01",
       "output_folder": "data/USGS_NWIS",
       "output_file_pattern": "usgs_streamflow_{date}.csv",
       "is_date_to_previous_day": true,
       "params": {
         "sites": "01646500",
-        "parameter_code": "00060"
+        "parameter_code": "00060",
+        "stage_parameter_code": "00065",
+        "nwps_api_url": "https://api.water.noaa.gov/nwps/v1/gauges",
+        "flood_categories_file": "data/usgs_flood_categories.csv"
       }
     },
     "Avalanche_ORG": {
@@ -149,7 +152,10 @@ Unknown keys raise `TypeError` when the downloader is constructed (the chain abo
 | `OpenMeteo_Flood` | `rivers_file` | `str` — `data/rivers.json` | Rivers reference file used to build the query. |
 | `OpenMeteo_Flood` | `thresholds_file` | `str` — `data/openmeteo_discharge_thresholds.csv` | Discharge threshold reference GEO_ETL joins; the download builds it when missing, `run_openmeteo_thresholds.py` refreshes it. |
 | `USGS_NWIS` | `sites` | `str` — `01646500` | Gauge site ID(s) sent as the `sites=` query parameter. |
-| `USGS_NWIS` | `parameter_code` | `str` — `00060` | Parameter code sent as `parameterCd=` (`00060` = discharge, cfs). |
+| `USGS_NWIS` | `parameter_code` | `str` — `00060` | Discharge parameter(s) sent as `parameterCd=` (`00060` = discharge, cfs); one row per gauge and day per code. |
+| `USGS_NWIS` | `stage_parameter_code` | `str` — `00065` | Gauge-height parameter (`00065`, ft) requested with the discharge and aggregated into `gauge_height`; empty disables the stage column. |
+| `USGS_NWIS` | `nwps_api_url` | `str` — `https://api.water.noaa.gov/nwps/v1/gauges` | NWS gauge endpoint the flood-category thresholds are read from, one request per gauge. |
+| `USGS_NWIS` | `flood_categories_file` | `str` — `data/usgs_flood_categories.csv` | NWS flood-stage reference GEO_ETL joins; the download adds a gauge missing from it and leaves a covered gauge alone. |
 | `IBTrACS` | `dataset` | `str` — `last3years` | IBTrACS dataset slice to download. |
 | `Avalanche_ORG` | `notices_file` | `str` — `data/avalanche_org_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
 | `USGS_Volcano` | `notices_file` | `str` — `data/usgs_volcano_notices.csv` | Local notices CSV stamped onto the downloaded rows. |

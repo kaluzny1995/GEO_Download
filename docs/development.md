@@ -19,7 +19,7 @@ Tests cover:
 - **GDACS downloader** — record building from GeoJSON, pagination, empty/no-data handling.
 - **EONET downloader** — event parsing (Point/Polygon geometry), closed events, missing geometry, empty/no-data handling.
 - **Open-Meteo Flood downloader** — river discharge queries, null value handling, multi-river aggregation.
-- **USGS NWIS downloader** — legacy WaterServices API, time series parsing, site metadata extraction.
+- **USGS NWIS downloader** — WaterServices instantaneous-values parsing (day mean of the discharge, day peak of the gauge height, non-numeric readings skipped, one row per configured parameter), NWS flood-category reference maintenance (`data/usgs_flood_categories.csv`, one gauge request, existing gauges untouched, unknown gauges logged) and the `no_flooding` … `major` classification of a day's peak stage.
 - **IBTrACS downloader** — CSV parsing with units row skip, `ISO_TIME` column resolution by header name (regression: a fixed column index dropped every record), date filtering, custom dataset selection, error handling.
 - **USGS Volcano downloader** — HANS API response parsing, alert filtering, notice URL construction, notice-detail lookup maintenance (`data/usgs_volcano_notices.csv`, one fetch per new notice) and stamping of `notice_type_name`, `latitude`, `longitude`, `region`, `synopsis`.
 - **NIFC downloader** — ArcGIS FeatureServer query, `outFields`/centroid handling, ArcGIS error-payload detection, date/time filtering, unit-name lookup maintenance (`data/nifc_unit_names.csv`, refresh when the data carries an unknown code) and `unit_name` stamping with raw-code fallback.
@@ -64,7 +64,7 @@ Rules are configured in `pyproject.toml`:
 - Enabled families: `E,W` (pycodestyle), `F` (pyflakes), `I` (import sorting), `B` (bugbear), `UP` (pyupgrade), `C4` (comprehensions), `SIM` (simplify), `RUF` (ruff-specific).
 - Exceptions: `SIM108` ignored (ternary rewrites), `F401` ignored in `__init__.py`, `B011` ignored in `test/**`.
 
-Current state: `ruff check .` → **0 findings**. `ruff format --check .` still reports 11 files (34 already formatted) — the formatter has intentionally **not** been applied repo-wide to keep the diff reviewable; run `tox -e format-fix` if you decide to adopt it.
+Current state: `ruff check .` → **0 findings**. `ruff format --check .` still reports 11 files (36 already formatted) — the formatter has intentionally **not** been applied repo-wide to keep the diff reviewable; run `tox -e format-fix` if you decide to adopt it.
 
 ### tox — run the pipeline
 
@@ -74,7 +74,7 @@ Current state: `ruff check .` → **0 findings**. `ruff format --check .` still 
 |---------|-----------|--------|
 | `tox` | default gate = `lint` + `py311` | ✅ |
 | `tox -e lint` | `ruff check --output-format=concise .` | ✅ |
-| `tox -e py311` | full pytest suite (235 tests) | ✅ |
+| `tox -e py311` | full pytest suite (268 tests) | ✅ |
 | `tox -e typecheck` | `mypy model downloader downloader_factory.py util.py run_download.py run_openmeteo_thresholds.py reverse_geocode.py` | ✅ |
 | `tox -e warnings` | `pytest -W error::DeprecationWarning` | ✅ |
 | `tox -e format` | `ruff format --check .` | ❌ 11 files (see above) |

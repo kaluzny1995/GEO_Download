@@ -130,21 +130,26 @@ Conventions shared by every source:
 
 ## USGS NWIS (US Streamflow)
 
-- **File:** `data/USGS_NWIS/usgs_streamflow_YYYY-MM-DD.csv` · 10 columns
-- **Grain:** one row per gauge per day · **Defaults:** site `01646500` (Potomac River near Washington DC), parameter `00060` (discharge) — both configurable via `sites` / `parameter_code`.
+- **File:** `data/USGS_NWIS/usgs_streamflow_YYYY-MM-DD.csv` · 12 columns
+- **Grain:** one row per gauge per day · **Defaults:** site `01646500` (Potomac River near Washington DC), discharge `00060` and gauge height `00065` — configurable via `sites` / `parameter_code` / `stage_parameter_code`.
+- **Provenance:** the [Instantaneous Values service](https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/) — 5-minute readings of both parameters in one request, aggregated per gauge and day by the downloader: `value` is the day's mean discharge and `gauge_height` the day's peak stage. The Daily Values service publishes no daily `00065` values at all, so the stage can only come from instantaneous data. Readings that are not numbers (`Ice`, `Eqp`, …) are skipped.
 
 | Column | Type / unit | Description |
 |--------|-------------|-------------|
 | `site_id` | string | `USGS-` + NWIS site number, e.g. `USGS-01646500` (8-digit surface-water gauge, 15-digit groundwater; matches the modern `monitoring_location_id`) |
 | `site_name` | text | Official NWIS station name, e.g. `POTOMAC RIVER NEAR WASH, DC LITTLE FALLS PUMP STA` |
-| `parameter_code` | code | 5-digit NWIS parameter code — `00060` = "Discharge, cubic feet per second"; the daily statistic is `00003` Mean (the statistic is not stored in this CSV) |
+| `parameter_code` | code | 5-digit NWIS parameter code of the row — `00060` = "Discharge, cubic feet per second"; the discharge row is the statistic the Daily Values service publishes as `00003` Mean, computed here from the day's instantaneous readings |
 | `date` | `YYYY-MM-DD` | Day of the value in the **site's local time zone** (truncated from the API's `dateTime`) |
-| `value` | number | Daily value for that day (the mean when the statistic is `00003`) |
+| `value` | number | The day's **mean** of that parameter's instantaneous readings, rounded to two decimals without trailing zeros |
 | `unit` | unit | `ft3/s` for parameter `00060`; metric discharge is a *separate* parameter code (`99060`, m³/s), not a unit option |
-| `qualifiers` | flags | NWIS quality codes joined with `,`: `A` approved for publication · `P` provisional, subject to revision · `e` estimated · `R` revised · `p` partial record · `Bkw` backwater · `Eqp` equipment malfunction · `Rat` rating being developed · `Ssn` monitored seasonally · `ZFL` zero flow · `***` value unavailable |
+| `qualifiers` | flags | Distinct NWIS quality codes of the day's readings joined with `,`: `A` approved for publication · `P` provisional, subject to revision · `e` estimated · `R` revised · `p` partial record · `Bkw` backwater · `Eqp` equipment malfunction · `Rat` rating being developed · `Ssn` monitored seasonally · `ZFL` zero flow · `***` value unavailable |
+| `gauge_height` | ft | The day's **peak** gauge height (parameter `00065`, highest instantaneous reading of the day), empty when the day has none |
+| `flood_category` | text | NWS flood category that peak stage reached: `no_flooding` · `action` · `minor` · `moderate` · `major` — against the gauge's own thresholds, empty when NWPS knows no threshold for the gauge |
 | `latitude` | degrees | Gauge latitude, decimal degrees (EPSG:4326) |
 | `longitude` | degrees | Gauge longitude, decimal degrees (EPSG:4326) |
 | `geocode_state` | code | Reverse-geocoded subdivision of the gauge point — the ETL's `state_province` (the gauge's country is fixed to `US`), empty when the API found none |
+
+- **Flood-category reference:** `data/usgs_flood_categories.csv` · 10 columns · one row per gauge — the NWS identifier (`lid`), name, state, location and the `action` / `minor` / `moderate` / `major` **stage** thresholds in feet, read from the [National Water Prediction Service gauge endpoint](https://api.water.noaa.gov/nwps/v1/docs/) (one request per gauge). The download keeps it present: a gauge missing from it is fetched and appended (`params.flood_categories_file` in `config.json` names the path), a gauge already covered is never rewritten, and a gauge NWPS does not know is logged and left out so its days keep an empty `flood_category`. Joined by GEO_ETL on `site_id` to fill `danger_rating` (the category the day's peak reached) and `other_metrics` (peak against the NWS thresholds).
 
 ## Avalanche.org (US Avalanche Forecasts)
 
@@ -379,7 +384,7 @@ actually produces:
 | GDACS | [EQ alert model](https://www.gdacs.org/knowledge/models_eq.aspx) · [API quickstart (PDF)](https://www.gdacs.org/Documents/2025/GDACS_API_quickstart_v1.pdf) · [MHEWS guide (PDF)](https://www.gdacs.org/documents/2025/GDACS_MHEWS_guide.pdf) · [Feed reference](https://www.gdacs.org/feed_reference.aspx) |
 | NASA EONET | [EONET v3 API docs](https://eonet.gsfc.nasa.gov/docs/v3) · [Categories](https://eonet.gsfc.nasa.gov/api/v3/categories) · [Sources](https://eonet.gsfc.nasa.gov/api/v3/sources) · [Magnitude units](https://eonet.gsfc.nasa.gov/api/v3/magnitudes) |
 | Open-Meteo Flood | [Flood API docs](https://open-meteo.com/en/docs/flood-api) · [GloFAS v4 announcement](https://www.ecmwf.int/en/about/media-centre/news/2022/copernicus-emergency-management-service-releases-glofas-v40) |
-| USGS NWIS | [Daily Values service](https://waterservices.usgs.gov/docs/dv-service/daily-values-service-details/) · [Parameter codes](https://help.waterdata.usgs.gov/codes-and-parameters/parameters) · [Provisional data statement](https://waterdata.usgs.gov/provisional-data-statement/) |
+| USGS NWIS | [Instantaneous Values service](https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/) · [Parameter codes](https://help.waterdata.usgs.gov/codes-and-parameters/parameters) · [NWS gauge (NWPS) API](https://api.water.noaa.gov/nwps/v1/docs/) · [Provisional data statement](https://waterdata.usgs.gov/provisional-data-statement/) |
 | Avalanche.org | [Public API docs](https://github.com/NationalAvalancheCenter/Avalanche.org-Public-API-Docs) · [North American danger scale](https://avalanche.org/avalanche-encyclopedia/human/resources/north-american-public-avalanche-danger-scale/) |
 | IBTrACS | [IBTrACS product page](https://www.ncei.noaa.gov/products/international-best-track-archive) · [v04r01 column documentation (PDF)](https://www.ncei.noaa.gov/sites/default/files/2025-09/IBTrACS_v04r01_column_documentation.pdf) · [v04r01 technical details (PDF)](https://www.ncei.noaa.gov/sites/default/files/2025-04/IBTrACS_version4r01_Technical_Details.pdf) · [HURDAT2 format (PDF)](https://www.nhc.noaa.gov/data/hurdat/hurdat2-format-atlantic.pdf) · [Dvorak technique](https://www.ospo.noaa.gov/products/ocean/tropical/dvorak.html) |
 | USGS Volcano | [Volcano Alert Level system](https://www.usgs.gov/programs/VHP/alert-level-system) · [Alert level icons / UNASSIGNED](https://www.usgs.gov/programs/VHP/alert-level-icons) · [HANS notices](https://volcanoes.usgs.gov/hans-public/) · [GVP volcano numbers](https://volcano.si.edu/faq/gvp_vnums.cfm) |
