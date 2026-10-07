@@ -72,7 +72,8 @@ GEO_Download/
 │   ├── avalanche_org_notices.csv  # Avalanche zone centroid lookup (place_location, state, latitude, longitude)
 │   ├── nifc_unit_names.csv    # NIFC jurisdiction unit lookup (unit_code, unit_name)
 │   ├── reverse_geocode.csv    # Reverse geocode lookup stamped into the source CSVs at download time (latitude, longitude, country_code, state_province)
-│   └── usgs_volcano_notices.csv  # USGS volcano notice lookup (notice_identifier, vnum, notice_type, latitude, longitude, region, synopsis)
+│   ├── usgs_volcano_notices.csv  # USGS volcano notice lookup (notice_identifier, vnum, notice_type, latitude, longitude, region, synopsis)
+│   └── usgs_volcano_ncei_eruptions.csv  # NCEI/WDS significant eruption lookup (id, vnum, volcano_name, year, month, day, vei, deaths, injuries, missing, houses_destroyed, damage_millions_dollars)
 └── logs/                      # Timestamped log files (per source subfolder)
     ├── USGS_Earthquake/
     ├── GDACS/

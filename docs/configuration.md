@@ -103,7 +103,9 @@ The application is configured via `config.json`. Each data source is defined und
       "output_file_pattern": "usgs_volcanoes_{date}.csv",
       "is_date_to_previous_day": true,
       "params": {
-        "notices_file": "data/usgs_volcano_notices.csv"
+        "notices_file": "data/usgs_volcano_notices.csv",
+        "ncei_eruptions_file": "data/usgs_volcano_ncei_eruptions.csv",
+        "ncei_api_url": "https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/volcanoes"
       }
     },
     "NIFC": {
@@ -159,6 +161,8 @@ Unknown keys raise `TypeError` when the downloader is constructed (the chain abo
 | `IBTrACS` | `dataset` | `str` — `last3years` | IBTrACS dataset slice to download. |
 | `Avalanche_ORG` | `notices_file` | `str` — `data/avalanche_org_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
 | `USGS_Volcano` | `notices_file` | `str` — `data/usgs_volcano_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
+| `USGS_Volcano` | `ncei_eruptions_file` | `str` — `data/usgs_volcano_ncei_eruptions.csv` | NCEI Significant Volcanic Eruptions reference stamped into `vei`, `casualties` and `damage`; the download builds it when missing. |
+| `USGS_Volcano` | `ncei_api_url` | `str` — `https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/volcanoes` | NCEI HazEL endpoint the eruption reference is fetched from. |
 | `NIFC` | `unit_names_file` | `str` — `data/nifc_unit_names.csv` | Fire-unit name lookup CSV. |
 
 `USGS_Earthquake` and `EONET` have no source-specific keys (`"params": {}` in the shipped config).

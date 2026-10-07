@@ -96,7 +96,9 @@
       "output_file_pattern": "usgs_volcanoes_{date}.csv",
       "is_date_to_previous_day": true,
       "params": {
-        "notices_file": "data/usgs_volcano_notices.csv"
+        "notices_file": "data/usgs_volcano_notices.csv",
+        "ncei_eruptions_file": "data/usgs_volcano_ncei_eruptions.csv",
+        "ncei_api_url": "https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/volcanoes"
       }
     },
     "NIFC": {

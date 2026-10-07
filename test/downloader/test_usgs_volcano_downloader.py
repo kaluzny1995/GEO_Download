@@ -1,10 +1,20 @@
+import csv
 import datetime as dt
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests.exceptions
 
-from downloader.usgs_volcano import NOTICE_API_URL, USGSVolcanoDownloader, _notice_key, _parse_notice
+from downloader.usgs_volcano import (
+    NCEI_API_URL,
+    NCEI_REFERENCE_FIELDS,
+    NCEI_STAMPED_COLUMNS,
+    NOTICE_API_URL,
+    USGSVolcanoDownloader,
+    _ncei_number,
+    _notice_key,
+    _parse_notice,
+)
 from test.downloader.conftest import MockLogger
 
 TEST_BASE_URL = "https://volcanoes.usgs.gov/hans-public/api/volcano"
@@ -52,8 +62,27 @@ EXPECTED_COLUMNS = [
 ]
 
 
-def _downloader(tmp_path, logger=None):
-    return USGSVolcanoDownloader(logger=logger or MockLogger(), notices_file=str(tmp_path / "usgs_volcano_notices.csv"))
+def _downloader(tmp_path, logger=None, ncei_rows=None, reverse_geocode_file=None):
+    """Downloader whose NCEI reference lives in *tmp_path* (seeded, never fetched)."""
+    reference = tmp_path / "usgs_volcano_ncei_eruptions.csv"
+    with open(reference, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=NCEI_REFERENCE_FIELDS)
+        writer.writeheader()
+        for row in ncei_rows or []:
+            writer.writerow({field: row.get(field, "") for field in NCEI_REFERENCE_FIELDS})
+    return USGSVolcanoDownloader(
+        logger=logger or MockLogger(),
+        notices_file=str(tmp_path / "usgs_volcano_notices.csv"),
+        ncei_eruptions_file=str(reference),
+        reverse_geocode_file=reverse_geocode_file,
+    )
+
+
+def _ncei_row(vnum="332010", **overrides):
+    row = dict.fromkeys(NCEI_REFERENCE_FIELDS, "")
+    row.update({"id": "6864", "vnum": vnum, "volcano_name": "Kilauea", "year": "2018"})
+    row.update(overrides)
+    return row
 
 
 def _stored(notice_identifier, vnum, **values):
@@ -457,11 +486,7 @@ class TestResolveNotices:
 def test_download_stamps_geocode_state(tmp_path):
     """Every notice coordinate is reverse-geocoded into geocode_state."""
     lookup = str(tmp_path / "reverse_geocode.csv")
-    downloader = USGSVolcanoDownloader(
-        logger=MockLogger(),
-        notices_file=str(tmp_path / "usgs_volcano_notices.csv"),
-        reverse_geocode_file=lookup,
-    )
+    downloader = _downloader(tmp_path, reverse_geocode_file=lookup)
 
     mock_response = MagicMock()
     mock_response.json.return_value = [
@@ -494,3 +519,248 @@ def test_download_stamps_geocode_state(tmp_path):
     assert len(result) == 1
     assert result[0]["geocode_state"] == "MT"
     assert "geocode_country" not in result[0]
+
+
+class TestNceiNumber:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (4, "4"),
+            (4.0, "4"),
+            (385.5, "385.5"),
+            (None, ""),
+            ("", ""),
+            ("14.5", "14.5"),
+            ("n/a", ""),
+            (float("nan"), ""),
+        ],
+    )
+    def test_formats_numbers_for_the_csv(self, value, expected):
+        assert _ncei_number(value) == expected
+
+
+class TestNceiReference:
+    def test_default_file_points_into_data_folder(self):
+        downloader = USGSVolcanoDownloader(logger=MockLogger())
+
+        assert downloader.ncei_eruptions_file == USGSVolcanoDownloader.DEFAULT_NCEI_FILE
+        assert downloader.ncei_eruptions_file.endswith("usgs_volcano_ncei_eruptions.csv")
+        assert f"data{__import__('os').sep}" in downloader.ncei_eruptions_file
+
+    def test_load_aggregates_max_vei_and_sums(self, tmp_path):
+        downloader = _downloader(
+            tmp_path,
+            ncei_rows=[
+                _ncei_row(id="1", year="1823", vei="2", damage_millions_dollars="10.5"),
+                _ncei_row(id="2", year="1990", vei="4", deaths="5", damage_millions_dollars=""),
+                _ncei_row(id="3", year="2018", vei="", deaths="1", damage_millions_dollars="2.5"),
+            ],
+        )
+
+        (entry,) = downloader._load_ncei().values()
+
+        assert entry["vei"] == "4"
+        assert entry["deaths"] == "6"
+        assert entry["damage_millions_dollars"] == "13"
+
+    def test_volcano_without_a_field_stays_empty(self, tmp_path):
+        downloader = _downloader(tmp_path, ncei_rows=[_ncei_row(id="1", year="1856", vei="3")])
+
+        entry = downloader._load_ncei()["332010"]
+
+        assert entry["vei"] == "3"
+        assert entry["deaths"] == ""
+        assert entry["damage_millions_dollars"] == ""
+
+    def test_rows_without_a_vnum_are_skipped(self, tmp_path):
+        downloader = _downloader(tmp_path, ncei_rows=[_ncei_row(vnum="", volcano_name="Piparo", vei="2")])
+
+        assert downloader._load_ncei() == {}
+
+    def test_missing_file_is_fetched_once(self, tmp_path):
+        downloader = USGSVolcanoDownloader(logger=MockLogger(), ncei_eruptions_file=str(tmp_path / "missing.csv"))
+
+        with patch.object(downloader, "_fetch_ncei") as mocked:
+            downloader._load_ncei()
+            downloader._load_ncei()
+
+        mocked.assert_called_once()
+
+
+class TestFetchNcei:
+    @staticmethod
+    def _page(items, page, total_pages):
+        return {"items": items, "page": page, "totalPages": total_pages}
+
+    def test_pages_through_the_database_and_skips_non_eruptions(self, tmp_path):
+        reference = tmp_path / "ncei.csv"
+        downloader = USGSVolcanoDownloader(logger=MockLogger(), ncei_eruptions_file=str(reference))
+        first = {
+            "id": 2,
+            "volcanoLocationNewNum": 332010,
+            "name": "Kilauea",
+            "year": 1990,
+            "month": 3,
+            "day": 1,
+            "vei": 4,
+            "deaths": 5,
+            "damageMillionsDollars": 10.5,
+            "eruption": True,
+        }
+        second = [
+            {
+                "id": 3,
+                "volcanoLocationNewNum": 311360,
+                "name": "Shishaldin",
+                "year": 1856,
+                "vei": None,
+                "eruption": True,
+            },
+            {"id": 4, "volcanoLocationNewNum": 999999, "name": "Other", "year": 2000, "eruption": False},
+        ]
+
+        with patch.object(downloader, "_get_json", side_effect=[self._page([first], 1, 2), self._page(second, 2, 2)]):
+            downloader._fetch_ncei()
+
+        with open(reference, newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        assert list(rows[0]) == NCEI_REFERENCE_FIELDS
+        assert len(rows) == 2  # the non-eruption row is never stored
+        by_vnum = {row["vnum"]: row for row in rows}
+        assert by_vnum["332010"]["vei"] == "4"
+        assert by_vnum["332010"]["deaths"] == "5"
+        assert by_vnum["332010"]["damage_millions_dollars"] == "10.5"
+        assert by_vnum["311360"]["vei"] == ""
+
+    def test_a_failed_page_raises_and_keeps_nothing(self, tmp_path):
+        reference = tmp_path / "ncei.csv"
+        downloader = USGSVolcanoDownloader(logger=MockLogger(), ncei_eruptions_file=str(reference))
+
+        with (
+            patch.object(downloader, "_get_json", return_value=None),
+            pytest.raises(RuntimeError, match="NCEI eruption fetch failed"),
+        ):
+            downloader._fetch_ncei()
+
+        assert not reference.exists()
+
+    def test_an_empty_database_raises(self, tmp_path):
+        downloader = USGSVolcanoDownloader(logger=MockLogger(), ncei_eruptions_file=str(tmp_path / "ncei.csv"))
+
+        with (
+            patch.object(downloader, "_get_json", return_value=self._page([], 1, 1)),
+            pytest.raises(RuntimeError, match="came back empty"),
+        ):
+            downloader._fetch_ncei()
+
+
+class TestStampNcei:
+    def test_appends_the_three_columns_with_values(self, tmp_path):
+        downloader = _downloader(
+            tmp_path, ncei_rows=[_ncei_row(vei="4", deaths="5411", damage_millions_dollars="385.5")]
+        )
+        records = [{"vnum": "332010", "synopsis": "line"}, {"vnum": "311120"}]
+
+        downloader._stamp_ncei(records)
+
+        assert records[0]["vei"] == "4"
+        assert records[0]["casualties"] == "5411"
+        assert records[0]["damage"] == "385.5"
+        assert records[1]["vei"] == ""
+        assert records[1]["casualties"] == ""
+        assert records[1]["damage"] == ""
+
+    def test_records_without_a_vnum_get_empty_values(self, tmp_path):
+        downloader = _downloader(tmp_path, ncei_rows=[_ncei_row(vei="4")])
+        records = [{"vnum": ""}]
+
+        downloader._stamp_ncei(records)
+
+        assert records[0]["vei"] == ""
+
+    def test_empty_records_never_touch_the_reference(self, tmp_path):
+        downloader = _downloader(tmp_path)
+
+        with patch.object(downloader, "_load_ncei") as mocked:
+            downloader._stamp_ncei([])
+
+        mocked.assert_not_called()
+
+    def test_download_stamps_the_columns_after_geocode_state(self, tmp_path):
+        downloader = _downloader(
+            tmp_path,
+            ncei_rows=[_ncei_row(vnum="1203-01-", vei="4", deaths="5411", damage_millions_dollars="385.5")],
+        )
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            {
+                "volcano_name": "Great Sitkin",
+                "vnum": "1203-01-",
+                "obs_abbr": "AVO",
+                "alert_level": "ADVISORY",
+                "color_code": "YELLOW",
+                "notice_type_cd": "VONA",
+                "notice_identifier": "VOA030",
+                "sent_utc": "2026-09-09T14:30:00Z",
+                "notice_url": "https://example.com/volcano",
+            }
+        ]
+        mock_response.raise_for_status = MagicMock()
+        payload = {
+            "notice_type": "Volcano Activity Notification",
+            "notice_sections": [{"vnum": "1203-01-", "lat": 52.0765, "lng": -176.1109, "region": "Aleutians"}],
+        }
+
+        with (
+            patch.object(downloader.session, "get", return_value=mock_response),
+            patch.object(downloader, "_fetch_notice", return_value=payload),
+        ):
+            (record,) = downloader.download_by_date_range(
+                TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 17)
+            )
+
+        assert list(record)[-3:] == NCEI_STAMPED_COLUMNS
+        assert record["vei"] == "4"
+        assert record["casualties"] == "5411"
+        assert record["damage"] == "385.5"
+
+
+class TestEnsureAuxiliaryFiles:
+    def test_an_existing_reference_is_not_refetched(self, tmp_path):
+        downloader = _downloader(tmp_path, ncei_rows=[_ncei_row()])
+
+        with patch.object(downloader, "_get_json") as mocked:
+            downloader.ensure_auxiliary_files(TEST_BASE_URL)
+
+        mocked.assert_not_called()
+        assert downloader._load_ncei()["332010"]["volcano_name"] == "Kilauea"
+
+    def test_a_missing_reference_is_built_from_the_endpoint(self, tmp_path):
+        reference = tmp_path / "ncei.csv"
+        downloader = USGSVolcanoDownloader(logger=MockLogger(), ncei_eruptions_file=str(reference))
+        page = {
+            "items": [
+                {
+                    "id": 7,
+                    "volcanoLocationNewNum": 332010,
+                    "name": "Kilauea",
+                    "year": 2018,
+                    "vei": 1,
+                    "eruption": True,
+                }
+            ],
+            "page": 1,
+            "totalPages": 1,
+        }
+
+        with patch.object(downloader, "_get_json", return_value=page):
+            downloader.ensure_auxiliary_files(TEST_BASE_URL)
+
+        assert reference.exists()
+        assert downloader._load_ncei()["332010"]["vei"] == "1"
+
+    def test_the_default_endpoint_is_the_ncei_hazel_api(self):
+        downloader = USGSVolcanoDownloader(logger=MockLogger())
+
+        assert downloader.ncei_api_url == NCEI_API_URL
+        assert downloader.ncei_api_url.endswith("/hazard-service/api/v1/volcanoes")

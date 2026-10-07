@@ -5,7 +5,7 @@ import datetime as dt
 import logging
 import os
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, TypedDict
 
 import requests
 
@@ -13,6 +13,82 @@ from downloader.base import BaseDownloader
 from reverse_geocode import stamp_geocode
 
 NOTICE_API_URL = "https://volcanoes.usgs.gov/hans-public/api/notice/getNotice"
+NCEI_API_URL = "https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/volcanoes"
+
+NCEI_REFERENCE_FIELDS = [
+    "id",
+    "vnum",
+    "volcano_name",
+    "year",
+    "month",
+    "day",
+    "vei",
+    "deaths",
+    "injuries",
+    "missing",
+    "houses_destroyed",
+    "damage_millions_dollars",
+]
+NCEI_STAMPED_COLUMNS = ["vei", "casualties", "damage"]
+_NCEI_PAGE_SIZE = 200
+
+
+class _NceiAgg(TypedDict):
+    """Per-volcano totals over every significant eruption row."""
+
+    volcano_name: str
+    vei: float | None
+    deaths: float
+    deaths_seen: bool
+    damage: float
+    damage_seen: bool
+
+
+def _ncei_float(value: str | float | int | None) -> float | None:
+    """One NCEI number as a float, ``None`` when undefined or unusable."""
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:  # NaN
+        return None
+    return number
+
+
+def _ncei_number(value: str | float | int | None) -> str:
+    """One NCEI number as written into a CSV cell, ``""`` when undefined.
+
+    Args:
+        value: A raw API number (``4``, ``14.5``) or anything unusable.
+
+    Returns:
+        The number without a trailing ``.0`` for whole numbers (``"4"``,
+        ``"14.5"``, ``"5405"``) and ``""`` for ``None``/blank/unparsable.
+    """
+    number = _ncei_float(value)
+    if number is None:
+        return ""
+    if number.is_integer():
+        return str(int(number))
+    return str(number)
+
+
+def _ncei_rank(row: dict) -> tuple[int, int, int, int]:
+    """Ordering key of one reference row: ``(year, month, day, id)`` as ints.
+
+    A missing month/day counts as ``0``, so a year-only row sorts before any
+    dated row of the same year; ``id`` breaks the remaining ties.
+    """
+
+    def _int(key: str) -> int:
+        try:
+            return int(float(row.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    return (_int("year"), _int("month"), _int("day"), _int("id"))
 
 
 def _notice_key(notice_identifier: str, vnum: str | int) -> str:
@@ -81,9 +157,20 @@ class USGSVolcanoDownloader(BaseDownloader):
     Each volcano point is also reverse-geocoded once into ``geocode_state``
     (the shared lookup ``data/reverse_geocode.csv``), the subdivision the ETL
     used to resolve itself.
+
+    On top of the notice fields, every record is stamped with the volcano's
+    record in the NCEI/WDS Significant Volcanic Eruptions Database, combined
+    over all of its significant eruptions (``vei`` = highest VEI,
+    ``casualties`` = total deaths, ``damage`` = total damage in millions of
+    USD — all three empty for a volcano NCEI does not list, e.g. Great
+    Sitkin). The whole database is kept once in
+    ``data/usgs_volcano_ncei_eruptions.csv`` (built on first use from the NCEI
+    HazEL endpoint, eruption rows only) and looked up by ``vnum`` against NCEI's
+    ``volcanoLocationNewNum`` — the same Smithsonian GVP volcano number.
     """
 
     DEFAULT_NOTICES_FILE = str(Path(__file__).resolve().parent.parent / "data" / "usgs_volcano_notices.csv")
+    DEFAULT_NCEI_FILE = str(Path(__file__).resolve().parent.parent / "data" / "usgs_volcano_ncei_eruptions.csv")
     NOTICES_FIELDS: ClassVar[list[str]] = [
         "notice_identifier",
         "vnum",
@@ -102,11 +189,16 @@ class USGSVolcanoDownloader(BaseDownloader):
         log_folder: str | None = None,
         notices_file: str | None = None,
         reverse_geocode_file: str | None = None,
+        ncei_eruptions_file: str | None = None,
+        ncei_api_url: str = NCEI_API_URL,
     ):
         super().__init__(
             timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
         )
         self.notices_file = notices_file or self.DEFAULT_NOTICES_FILE
+        self.ncei_eruptions_file = ncei_eruptions_file or self.DEFAULT_NCEI_FILE
+        self.ncei_api_url = ncei_api_url
+        self._ncei: dict[str, dict[str, str]] | None = None
 
     @staticmethod
     def _build_record(volcano: dict) -> dict:
@@ -267,14 +359,148 @@ class USGSVolcanoDownloader(BaseDownloader):
             record["synopsis"] = values.get("synopsis", "")
         self.logger.info(f"  notice lookup resolved {len(pairs & mapping.keys())} of {len(pairs)} distinct pairs")
 
+    def _fetch_ncei(self) -> None:
+        """Download the whole NCEI significant-eruption database into the reference CSV.
+
+        Pages through the NCEI HazEL endpoint, keeps the eruption rows only
+        (the database also carries non-eruption volcano events such as
+        significant earthquakes) and writes them sorted by volcano number and
+        date. A partial download never overwrites the reference: without a
+        complete database the run fails loudly instead of stamping holes.
+
+        Raises:
+            RuntimeError: When a page cannot be fetched or the database came
+                back empty.
+        """
+        collected: list[dict[str, str]] = []
+        page = 1
+        while True:
+            data = self._get_json(f"{self.ncei_api_url}?size={_NCEI_PAGE_SIZE}&page={page}")
+            if not isinstance(data, dict):
+                raise RuntimeError(f"NCEI eruption fetch failed on page {page} ({self.ncei_api_url})")
+            for item in data.get("items") or []:
+                if not item.get("eruption"):
+                    continue
+                collected.append(
+                    {
+                        "id": str(item.get("id") or ""),
+                        "vnum": str(item.get("volcanoLocationNewNum") or ""),
+                        "volcano_name": str(item.get("name") or ""),
+                        "year": str(item.get("year") or ""),
+                        "month": str(item.get("month") or ""),
+                        "day": str(item.get("day") or ""),
+                        "vei": _ncei_number(item.get("vei")),
+                        "deaths": _ncei_number(item.get("deaths")),
+                        "injuries": _ncei_number(item.get("injuries")),
+                        "missing": _ncei_number(item.get("missing")),
+                        "houses_destroyed": _ncei_number(item.get("housesDestroyed")),
+                        "damage_millions_dollars": _ncei_number(item.get("damageMillionsDollars")),
+                    }
+                )
+            if page >= int(data.get("totalPages") or 1):
+                break
+            page += 1
+        if not collected:
+            raise RuntimeError(f"NCEI eruption database came back empty ({self.ncei_api_url})")
+
+        folder = os.path.dirname(self.ncei_eruptions_file)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        collected.sort(key=lambda row: (row["vnum"], _ncei_rank(row)))
+        with open(self.ncei_eruptions_file, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=NCEI_REFERENCE_FIELDS)
+            writer.writeheader()
+            writer.writerows(collected)
+        self.logger.info(f"NCEI eruption reference: {len(collected)} rows → {self.ncei_eruptions_file}")
+
+    def _load_ncei(self) -> dict[str, dict[str, str]]:
+        """The reference CSV aggregated per volcano, ``vnum →`` stamped numbers.
+
+        Returns:
+            One entry per volcano NCEI lists, combined over all of its
+            significant eruptions: ``vei`` is the highest VEI the volcano
+            ever reached, ``deaths`` (stamped as ``casualties``) and
+            ``damage_millions_dollars`` (stamped as ``damage``) are the sums
+            over its eruption rows. A field no eruption of that volcano
+            reports stays empty and an unknown volcano gets no entry — the
+            stamped columns then stay empty and the ETL turns them into
+            ``NULL``.
+        """
+        if self._ncei is None:
+            if not (os.path.exists(self.ncei_eruptions_file) and os.path.getsize(self.ncei_eruptions_file) > 0):
+                self._fetch_ncei()
+            totals: dict[str, _NceiAgg] = {}
+            if os.path.exists(self.ncei_eruptions_file):
+                with open(self.ncei_eruptions_file, newline="", encoding="utf-8") as handle:
+                    for row in csv.DictReader(handle):
+                        vnum = (row.get("vnum") or "").strip()
+                        if not vnum:
+                            continue
+                        agg = totals.setdefault(
+                            vnum,
+                            {
+                                "volcano_name": (row.get("volcano_name") or "").strip(),
+                                "vei": None,
+                                "deaths": 0.0,
+                                "deaths_seen": False,
+                                "damage": 0.0,
+                                "damage_seen": False,
+                            },
+                        )
+                        vei = _ncei_float(row.get("vei"))
+                        max_vei = agg["vei"]
+                        if vei is not None and (max_vei is None or vei > max_vei):
+                            agg["vei"] = vei
+                        deaths = _ncei_float(row.get("deaths"))
+                        if deaths is not None:
+                            agg["deaths"] = agg["deaths"] + deaths
+                            agg["deaths_seen"] = True
+                        damage = _ncei_float(row.get("damage_millions_dollars"))
+                        if damage is not None:
+                            agg["damage"] = agg["damage"] + damage
+                            agg["damage_seen"] = True
+            self._ncei = {
+                vnum: {
+                    "volcano_name": agg["volcano_name"],
+                    "vei": _ncei_number(agg["vei"]),
+                    "deaths": _ncei_number(agg["deaths"]) if agg["deaths_seen"] else "",
+                    "damage_millions_dollars": _ncei_number(agg["damage"]) if agg["damage_seen"] else "",
+                }
+                for vnum, agg in totals.items()
+            }
+        return self._ncei
+
+    def _stamp_ncei(self, records: list[dict]) -> None:
+        """Append the NCEI reference's per-volcano numbers to every record.
+
+        The three columns land after ``geocode_state`` (``vei``, ``casualties``,
+        ``damage``): a volcano NCEI does not carry — or a field none of its
+        eruptions reports — gets an empty value, which the ETL turns
+        into ``NULL``. Every record gets the keys, so the CSV column order
+        stays identical across files.
+        """
+        if not records:
+            return
+        lookup = self._load_ncei()
+        matched = 0
+        for record in records:
+            row = lookup.get(str(record.get("vnum") or "").strip())
+            record["vei"] = row["vei"] if row else ""
+            record["casualties"] = row["deaths"] if row else ""
+            record["damage"] = row["damage_millions_dollars"] if row else ""
+            if row is not None:
+                matched += 1
+        self.logger.info(f"  NCEI eruption lookup matched {matched} of {len(records)} record(s)")
+
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Download elevated volcano alerts from USGS HANS API for the given date range.
 
         Only returns volcanoes with alert level above NORMAL (i.e. ADVISORY, WATCH, WARNING).
         Filters by notice_date to include only notices issued within the date range.
         The kept records are enriched with their notice details from
-        :attr:`notices_file` and their subdivision from the reverse-geocode
-        lookup before returning.
+        :attr:`notices_file`, their subdivision from the reverse-geocode
+        lookup and their NCEI eruption record (:attr:`ncei_eruptions_file`)
+        before returning.
         """
         self.logger.info(f"Downloading USGS Volcano data for {start_date.date()} to {end_date.date()}")
 
@@ -296,6 +522,28 @@ class USGSVolcanoDownloader(BaseDownloader):
 
         self._resolve_notices(all_records)
         stamp_geocode(all_records, output=self.reverse_geocode_file, columns=("geocode_state",), logger=self.logger)
+        self._stamp_ncei(all_records)
 
         self.logger.info(f"Downloaded {len(all_records)} USGS Volcano records total")
         return all_records
+
+    def ensure_auxiliary_files(self, api_url: str) -> None:
+        """Build the NCEI eruption reference stamped onto the day CSVs.
+
+        ``data/usgs_volcano_ncei_eruptions.csv`` carries one row per
+        significant eruption of the NCEI/WDS database (``vnum`` = Smithsonian
+        GVP volcano number, ``vei``, ``deaths``, ``damage_millions_dollars``, …)
+        that the downloader joins onto every record at download time. Without
+        it the ``vei``/``casualties``/``damage`` columns stay empty, so a run
+        that finds it missing builds it from the NCEI HazEL endpoint (one
+        paged pull of the whole ~900-row database). An existing reference is
+        left alone; delete it to force a refresh.
+
+        Args:
+            api_url: HANS endpoint configured for this source (the reference
+                comes from NCEI, not from it).
+        """
+        self.logger.info(
+            f"Ensuring NCEI eruption reference {self.ncei_eruptions_file} (NCEI endpoint {self.ncei_api_url})"
+        )
+        self._load_ncei()

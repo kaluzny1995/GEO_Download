@@ -298,7 +298,7 @@ _File total: **176 columns** = 19 core + 155 agency + 2 stamped geocode._
 
 ## USGS Volcano
 
-- **File:** `data/USGS_Volcano/usgs_volcanoes_YYYY-MM-DD.csv` · 17 columns
+- **File:** `data/USGS_Volcano/usgs_volcanoes_YYYY-MM-DD.csv` · 20 columns
 - **Grain:** one row per notice for an elevated volcano · **Coverage:** only volcanoes above `NORMAL` alert (ADVISORY / WATCH / WARNING), filtered to notices issued inside the requested day.
 
 | Column | Type / unit | Description |
@@ -320,8 +320,13 @@ _File total: **176 columns** = 19 core + 155 agency + 2 stamped geocode._
 | `region` | text | Volcano region from the notice's own section, e.g. `Aleutians` |
 | `synopsis` | text | The notice's one-line status for that volcano, e.g. `AVO Great Sitkin ORANGE/WATCH - Slow eruption of lava continues.` |
 | `geocode_state` | 2-letter code | Reverse-geocoded subdivision of the notice coordinate (shared lookup `data/reverse_geocode.csv`) — the ETL's `state_province`, `ZZ` when the geocode has none (e.g. ocean points) |
+| `vei` | integer | Volcanic Explosivity Index of the volcano's largest significant eruption in the NCEI/WDS Significant Volcanic Eruptions Database (0–8), empty when NCEI lists no eruption for the volcano (e.g. Great Sitkin) |
+| `casualties` | people | Total deaths across the volcano's significant NCEI eruption records, empty when none of them reports a death toll |
+| `damage` | million USD | Total reported damage across the volcano's significant NCEI eruption records, empty when none of them reports damage |
 
 > ℹ **Notice-detail lookup.** The feed only carries the notice's headline fields — coordinates, region, status line and full notice type live behind the notice endpoint and are stamped at download time through the consolidated lookup `data/usgs_volcano_notices.csv` (`notice_identifier, vnum, notice_type, latitude, longitude, region, synopsis`, one row per volcano section of a notice, sorted by key). A notice the file does not cover yet is fetched once (however many of its volcanoes appear) and persisted; notices are immutable once published, so a cached entry never goes stale. Records without an identifier or volcano number get empty values. A failed fetch or a payload without the requested section fails the download instead of leaving holes.
+
+> ℹ **NCEI eruption lookup.** `vei`, `casualties` and `damage` are stamped from the consolidated reference `data/usgs_volcano_ncei_eruptions.csv` (`id, vnum, volcano_name, year, month, day, vei, deaths, injuries, missing, houses_destroyed, damage_millions_dollars` — one row per significant eruption, non-eruption seismic events excluded). The file is built on first use from the NCEI HazEL endpoint (`https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/volcanoes`, paged, 1-based `page`), and each volcano's rows are combined over all of its significant eruptions: `vei` = the maximum index, `casualties` = the total death toll, `damage` = the total damage in millions of USD. The join is on `vnum` = NCEI's `volcanoLocationNewNum` — the same Smithsonian GVP volcano number. A volcano NCEI does not carry (e.g. Great Sitkin) or a field none of its eruptions reports gets an empty value. A failed or empty fetch fails the download instead of overwriting the reference with a partial one.
 
 ## NIFC (US Wildland Fires)
 
