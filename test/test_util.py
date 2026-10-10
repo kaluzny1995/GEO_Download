@@ -1,4 +1,6 @@
 import datetime as dt
+import logging
+import sys
 
 import pytest
 
@@ -80,3 +82,46 @@ def test_get_recent_file_date_no_csv_files(tmp_path):
 
     # Assert
     assert result is None
+
+
+def test_setup_logger_writes_file_and_mirrors_stdout(tmp_path):
+    # Arrange
+    log_file = str(tmp_path / "test.log")
+
+    # Act
+    logger = util.setup_logger(name="test_setup_logger", log_file=log_file)
+    logger.info("hello world")
+
+    # Assert — file content
+    with open(log_file) as f:
+        content = f.read()
+    assert "INFO" in content
+    assert "hello world" in content
+    # Assert — one FileHandler + one plain stdout StreamHandler
+    file_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+    stream_handlers = [
+        h for h in logger.handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+    ]
+    assert len(file_handlers) == 1
+    assert len(stream_handlers) == 1
+    assert stream_handlers[0].stream is sys.stdout
+
+
+def test_setup_logger_no_duplicate_handlers(tmp_path):
+    # Arrange
+    log_file = str(tmp_path / "test.log")
+
+    # Act
+    logger1 = util.setup_logger(name="test_setup_logger_dedup", log_file=log_file)
+    logger2 = util.setup_logger(name="test_setup_logger_dedup", log_file=log_file)
+
+    # Assert
+    assert logger1 is logger2
+    file_handlers = [h for h in logger1.handlers if isinstance(h, logging.FileHandler)]
+    stream_handlers = [
+        h for h in logger1.handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+    ]
+    assert len(file_handlers) == 1
+    assert len(stream_handlers) == 1
