@@ -7,6 +7,7 @@ import os
 from itertools import pairwise
 from pathlib import Path
 from typing import ClassVar
+from urllib.parse import urlencode
 
 from downloader.base import BaseDownloader
 
@@ -84,8 +85,10 @@ class AvalancheOrgDownloader(BaseDownloader):
     """Downloads avalanche danger ratings from the Avalanche.org API.
 
     Covers 28 US avalanche centers with 82+ forecast zones.
-    Returns daily danger ratings (1-5 scale) with zone metadata and the zone
-    polygon centroid (``latitude``/``longitude``). The centroids are also
+    Returns daily danger ratings (1-5 scale) with zone metadata, the zone
+    polygon centroid (``latitude``/``longitude``) and the expected avalanche
+    size (``avalanche_size`` - destructive size class D1-D5, read from the
+    per-zone forecast product). The centroids are also
     merged into the consolidated lookup ``data/avalanche_org_notices.csv``
     (``place_location, state, latitude, longitude``), keyed zone name + state,
     so zones that leave the feed stay covered.
@@ -111,7 +114,9 @@ class AvalancheOrgDownloader(BaseDownloader):
 
         ``latitude``/``longitude`` are the area weighted centroid of the zone
         polygon, rounded to 6 decimals; a feature without usable geometry gets
-        empty values.
+        empty values. ``avalanche_size`` starts empty and is filled by
+        :meth:`_zone_size` from the zone's forecast product when one is
+        available for the day.
         """
         props = feature.get("properties", {})
         warning = props.get("warning", {}) or {}
@@ -133,7 +138,94 @@ class AvalancheOrgDownloader(BaseDownloader):
             "link": props.get("link", ""),
             "latitude": round(centroid[1], 6) if centroid else "",
             "longitude": round(centroid[0], 6) if centroid else "",
+            "avalanche_size": "",
         }
+
+    @staticmethod
+    def _forecast_url(base_url: str) -> str:
+        """The per-zone forecast endpoint sitting beside the map-layer one.
+
+        The public API docs only describe ``/v2/public/products/map-layer``;
+        the full forecast (avalanche problems, expected sizes) is served by
+        the sibling ``/v2/public/product`` route, derived here so the
+        configured ``api_url`` stays the single source of truth.
+        """
+        return base_url.replace("/products/map-layer", "/product")
+
+    @staticmethod
+    def _avalanche_size(product: dict | None) -> str:
+        """Largest expected destructive size class (D1-D5) of a forecast product.
+
+        Every entry of ``forecast_avalanche_problems`` carries a ``size``
+        array of per-elevation-band classes (``"2"``, ``"2.5"`` …); the
+        largest one wins and is rendered without trailing zeros (``3``,
+        ``2.5``). Centers publish half steps (D1.5 … D4.5), so the answer is
+        not restricted to whole classes.
+
+        Returns:
+            The size class as text, or ``""`` when the product publishes no
+            problems (off-season statements, early season) or none of the
+            sizes parse as a number.
+        """
+        sizes: list[float] = []
+        for problem in (product or {}).get("forecast_avalanche_problems") or []:
+            for value in problem.get("size") or []:
+                try:
+                    sizes.append(float(value))
+                except (TypeError, ValueError):
+                    continue
+        return "" if not sizes else f"{max(sizes):g}"
+
+    @staticmethod
+    def _product_covers_day(product: dict | None, day: dt.date) -> bool:
+        """Whether the *current-only* forecast product is valid on *day*.
+
+        The forecast endpoint ignores a ``day`` parameter — it always serves
+        the live product — so its size may only be attached to a day inside
+        the product's own publish/expiry window. A historic backfill of past
+        CSVs then leaves the sizes empty instead of stamping today's answer
+        onto a past day.
+
+        Returns:
+            ``True`` when ``published_time`` ≤ *day* ≤ ``expires_time``;
+            ``False`` for a missing product or unreadable timestamps.
+        """
+        if not product:
+            return False
+        try:
+            start = dt.datetime.fromisoformat(product["published_time"]).date()
+            end = dt.datetime.fromisoformat(product["expires_time"]).date()
+        except (KeyError, TypeError, ValueError):
+            return False
+        return start <= day <= end
+
+    def _zone_size(self, feature: dict, forecast_url: str, day: dt.date, cache: dict) -> str:
+        """The zone's expected size class on *day*, fetched at most once per zone.
+
+        Only rated zones (``danger_level`` ≥ 1) are looked up — an unrated or
+        off-season zone has no problems to size — and the product is cached
+        per ``(center_id, zone_id)`` so a multi-day range does not refetch it.
+
+        Args:
+            feature: The map-layer GeoJSON feature of the zone.
+            forecast_url: The per-zone forecast endpoint (:meth:`_forecast_url`).
+            day: The map-layer day being downloaded.
+            cache: Caller-owned ``(center_id, zone_id)`` → product map.
+
+        Returns:
+            The size class as text, or ``""`` when the zone is unrated, the
+            product is missing or it does not cover *day*.
+        """
+        props = feature.get("properties") or {}
+        level = props.get("danger_level")
+        if not isinstance(level, int) or isinstance(level, bool) or level < 1:
+            return ""
+        key = (str(props.get("center_id", "") or ""), feature.get("id"))
+        if key not in cache:
+            query = urlencode({"type": "forecast", "center_id": key[0], "zone_id": key[1]})
+            cache[key] = self._get_json(f"{forecast_url}?{query}")
+        product = cache[key]
+        return self._avalanche_size(product) if self._product_covers_day(product, day) else ""
 
     def _update_notices(self, records: list[dict]) -> None:
         """Merge the day's zone centroids into the notices lookup CSV.
@@ -186,13 +278,19 @@ class AvalancheOrgDownloader(BaseDownloader):
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Download avalanche danger ratings for the given date range.
 
-        Queries the map-layer endpoint for each day. Returns danger ratings
-        for all US avalanche zones and refreshes the notices lookup with the
-        centroids seen along the way.
+        Queries the map-layer endpoint for each day and, for every rated
+        zone, the per-zone forecast endpoint for the expected avalanche size
+        (``avalanche_size`` - the largest destructive size class D1-D5 the
+        forecast publishes; empty off-season or for a day outside the live
+        product's window). Returns danger ratings for all US avalanche zones
+        and refreshes the notices lookup with the centroids seen along the
+        way.
         """
         self.logger.info(f"Downloading Avalanche.org data for {start_date.date()} to {end_date.date()}")
 
         all_records: list[dict] = []
+        forecast_url = self._forecast_url(base_url)
+        products: dict[tuple[str, object], dict | None] = {}
 
         current = start_date
         while current <= end_date:
@@ -205,6 +303,7 @@ class AvalancheOrgDownloader(BaseDownloader):
                 for feature in features:
                     record = self._build_record(feature)
                     record["date"] = self._format_date(current)
+                    record["avalanche_size"] = self._zone_size(feature, forecast_url, current.date(), products)
                     day_records.append(record)
                 all_records.extend(day_records)
 

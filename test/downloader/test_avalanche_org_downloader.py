@@ -8,9 +8,13 @@ import pytest
 
 from downloader.avalanche_org import AvalancheOrgDownloader
 
+MAP_LAYER_URL = "https://api.avalanche.org/v2/public/products/map-layer"
+FORECAST_URL = "https://api.avalanche.org/v2/public/product"
 
-def _make_feature(danger_level=2, danger="moderate", zone_name="Front Range", center_id="CAIC",
-                  state="CO") -> dict[str, Any]:
+
+def _make_feature(
+    danger_level=2, danger="moderate", zone_name="Front Range", center_id="CAIC", state="CO"
+) -> dict[str, Any]:
     return {
         "type": "Feature",
         "id": 2688,
@@ -42,6 +46,26 @@ def _make_feature(danger_level=2, danger="moderate", zone_name="Front Range", ce
     }
 
 
+def _make_product(*sizes, published="2026-09-15T14:35:00+00:00", expires="2026-09-17T14:00:00+00:00") -> dict:
+    """A forecast product whose problems carry one ``size`` array each."""
+    return {
+        "published_time": published,
+        "expires_time": expires,
+        "forecast_avalanche_problems": [{"name": "Wind Slab", "size": list(sizes)}] if sizes else [],
+    }
+
+
+def _map_layer_then(features_by_day: list[list[dict]], product: dict | None = None):
+    """Side effect answering map-layer per day and the forecast product otherwise."""
+
+    def _side_effect(url: str):
+        if "products/map-layer" in url:
+            return {"type": "FeatureCollection", "features": features_by_day.pop(0)}
+        return product
+
+    return _side_effect
+
+
 def test_build_record():
     dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
     feature = _make_feature()
@@ -53,6 +77,7 @@ def test_build_record():
     assert record["off_season"] is False
     assert record["latitude"] == pytest.approx(39.6)
     assert record["longitude"] == pytest.approx(-105.4)
+    assert record["avalanche_size"] == ""
 
 
 def test_build_record_no_warning():
@@ -80,6 +105,72 @@ def test_build_record_empty_properties():
     assert record["warning"] == ""
     assert record["latitude"] == ""
     assert record["longitude"] == ""
+    assert record["avalanche_size"] == ""
+
+
+def test_forecast_url_is_the_product_route_beside_the_map_layer():
+    assert AvalancheOrgDownloader._forecast_url(MAP_LAYER_URL) == FORECAST_URL
+
+
+def test_avalanche_size_takes_the_largest_class_across_problems_and_bands():
+    product = {
+        "forecast_avalanche_problems": [
+            {"name": "Wind Slab", "size": ["2", "2.5"]},
+            {"name": "Persistent Slab", "size": ["1", "3"]},
+        ]
+    }
+
+    assert AvalancheOrgDownloader._avalanche_size(product) == "3"
+
+
+def test_avalanche_size_renders_half_steps_without_trailing_zeros():
+    assert AvalancheOrgDownloader._avalanche_size(_make_product("2.5", "1")) == "2.5"
+
+
+def test_avalanche_size_is_empty_without_problems_or_parseable_values():
+    assert AvalancheOrgDownloader._avalanche_size(_make_product()) == ""
+    assert AvalancheOrgDownloader._avalanche_size(None) == ""
+    assert AvalancheOrgDownloader._avalanche_size({"forecast_avalanche_problems": [{"size": ["", "n/a"]}]}) == ""
+
+
+def test_product_covers_day_inside_the_publish_expiry_window():
+    product = _make_product("2", published="2026-09-15T14:35:00+00:00", expires="2026-09-17T14:00:00+00:00")
+
+    assert AvalancheOrgDownloader._product_covers_day(product, dt.date(2026, 9, 15))
+    assert AvalancheOrgDownloader._product_covers_day(product, dt.date(2026, 9, 17))
+    assert not AvalancheOrgDownloader._product_covers_day(product, dt.date(2026, 9, 14))
+    assert not AvalancheOrgDownloader._product_covers_day(product, dt.date(2026, 9, 18))
+
+
+def test_product_covers_day_is_false_for_missing_or_unreadable_product():
+    assert not AvalancheOrgDownloader._product_covers_day(None, dt.date(2026, 9, 15))
+    assert not AvalancheOrgDownloader._product_covers_day({}, dt.date(2026, 9, 15))
+    assert not AvalancheOrgDownloader._product_covers_day(
+        {"published_time": "not-a-date", "expires_time": "2026-09-17T14:00:00+00:00"}, dt.date(2026, 9, 15)
+    )
+
+
+@patch("downloader.base.BaseDownloader._get_json")
+def test_zone_size_skips_unrated_zones(mock_get_json):
+    dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
+    feature = _make_feature(danger_level=-1, danger="no rating")
+
+    assert dl._zone_size(feature, FORECAST_URL, dt.date(2026, 9, 15), {}) == ""
+    mock_get_json.assert_not_called()
+
+
+@patch("downloader.base.BaseDownloader._get_json")
+def test_zone_size_uses_the_cached_product_only_when_it_covers_the_day(mock_get_json):
+    dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
+    feature = _make_feature()
+    product = _make_product("2", "3", published="2026-09-15T14:35:00+00:00", expires="2026-09-16T14:00:00+00:00")
+    mock_get_json.return_value = product
+    cache: dict = {}
+
+    assert dl._zone_size(feature, FORECAST_URL, dt.date(2026, 9, 15), cache) == "3"
+    assert dl._zone_size(feature, FORECAST_URL, dt.date(2026, 9, 16), cache) == "3"
+    assert dl._zone_size(feature, FORECAST_URL, dt.date(2026, 9, 17), cache) == ""
+    mock_get_json.assert_called_once()
 
 
 def test_build_record_without_geometry_has_empty_centroid():
@@ -105,6 +196,33 @@ def test_download(mock_get_json):
     assert len(records) == 1
     assert records[0]["zone_name"] == "Front Range"
     assert records[0]["date"] == "2026-09-15"
+    # The mock answered the forecast call with the FeatureCollection, which
+    # is not a product (no publish/expiry window) → no size attached.
+    assert records[0]["avalanche_size"] == ""
+
+
+@patch("downloader.base.BaseDownloader._get_json")
+def test_download_attaches_the_size_of_a_covering_product(mock_get_json):
+    product = _make_product("2", "3", published="2026-09-15T14:35:00+00:00", expires="2026-09-16T14:00:00+00:00")
+    mock_get_json.side_effect = _map_layer_then([[_make_feature()]], product)
+    dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
+    dl.logger = MagicMock()
+
+    records = dl.download_by_date_range(MAP_LAYER_URL, dt.datetime(2026, 9, 15), dt.datetime(2026, 9, 15))
+
+    assert records[0]["avalanche_size"] == "3"
+
+
+@patch("downloader.base.BaseDownloader._get_json")
+def test_download_leaves_the_size_empty_for_a_day_outside_the_product(mock_get_json):
+    product = _make_product("3", published="2026-09-10T14:35:00+00:00", expires="2026-09-12T14:00:00+00:00")
+    mock_get_json.side_effect = _map_layer_then([[_make_feature()]], product)
+    dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
+    dl.logger = MagicMock()
+
+    records = dl.download_by_date_range(MAP_LAYER_URL, dt.datetime(2026, 9, 15), dt.datetime(2026, 9, 15))
+
+    assert records[0]["avalanche_size"] == ""
 
 
 @patch("downloader.base.BaseDownloader._get_json")
@@ -133,15 +251,12 @@ def test_download_no_data(mock_get_json):
 def test_download_multiple_days(mock_get_json):
     feature1 = _make_feature(danger_level=2, danger="moderate")
     feature2 = _make_feature(danger_level=3, danger="considerable", zone_name="Mosquito Range")
-    mock_get_json.side_effect = [
-        {"type": "FeatureCollection", "features": [feature1]},
-        {"type": "FeatureCollection", "features": [feature2]},
-    ]
+    mock_get_json.side_effect = _map_layer_then([[feature1], [feature2]])
     dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
     dl.logger = MagicMock()
     start = dt.datetime(2026, 9, 14)
     end = dt.datetime(2026, 9, 15)
-    records = dl.download_by_date_range("unused", start, end)
+    records = dl.download_by_date_range(MAP_LAYER_URL, start, end)
     assert len(records) == 2
     assert records[0]["date"] == "2026-09-14"
     assert records[1]["date"] == "2026-09-15"

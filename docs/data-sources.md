@@ -153,8 +153,8 @@ Conventions shared by every source:
 
 ## Avalanche.org (US Avalanche Forecasts)
 
-- **File:** `data/Avalanche_ORG/avalancheorg_avalanche_YYYY-MM-DD.csv` · 16 columns
-- **Grain:** one row per forecast zone per day · **Coverage:** 28 US avalanche centers / 82+ zones; the map-layer endpoint is queried once per day.
+- **File:** `data/Avalanche_ORG/avalancheorg_avalanche_YYYY-MM-DD.csv` · 17 columns
+- **Grain:** one row per forecast zone per day · **Coverage:** 28 US avalanche centers / 82+ zones; the map-layer endpoint is queried once per day, and each rated zone's per-zone forecast product once per run (cached) for its expected size.
 
 | Column | Type / unit | Description |
 |--------|-------------|-------------|
@@ -173,6 +173,7 @@ Conventions shared by every source:
 | `link` | URL | The zone's forecast page on the center site (falls back to the center homepage when off-season or archived) |
 | `latitude` | degrees | Area weighted centroid of the zone polygon, rounded to 6 decimals (WGS84); empty when the feature has no usable geometry |
 | `longitude` | degrees | Same centroid, longitude |
+| `avalanche_size` | D1 … D5 | Largest expected avalanche size on the destructive size classification (D1.5 … D4.5 half steps allowed), read from the per-zone forecast product (`api.avalanche.org/v2/public/product`): the max `size` class across every avalanche problem the forecast publishes. Empty while off-season (the product carries no problems), for an unrated zone, or for a day outside the live product's publish/expiry window — the endpoint only serves the *current* forecast, so historic backfills leave it empty rather than stamping today's answer onto a past day |
 | `date` | `YYYY-MM-DD` | Day that was queried — added by the downloader, not present in the API response (matches the API's `?day=` archive parameter) |
 
 > ℹ **Zone centroid lookup.** Every centroid is also merged into the consolidated lookup `data/avalanche_org_notices.csv` (`place_location, state, latitude, longitude`, one row per zone keyed zone name + state, sorted by state). Existing rows are kept when a zone disappears from the feed, so zones that leave the daily map stay covered.
