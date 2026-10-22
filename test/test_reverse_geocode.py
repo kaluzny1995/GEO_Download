@@ -1,10 +1,12 @@
 import json
+import urllib.error
 from io import BytesIO
 from unittest.mock import patch
 
 import pytest
 
 from reverse_geocode import (
+    MAX_FETCH_ATTEMPTS,
     USER_AGENT,
     coord_key,
     geocode_map,
@@ -75,6 +77,40 @@ class TestReverseGeocode:
         reverse_geocode(1.0, 2.0, api_url="https://example.org/reverse")
 
         assert mock_urlopen.call_args.args[0].full_url.startswith("https://example.org/reverse?")
+
+    @staticmethod
+    def _http_error(code: int, headers: dict | None = None) -> urllib.error.HTTPError:
+        return urllib.error.HTTPError("https://example.org/reverse", code, "err", headers or {}, BytesIO(b""))
+
+    @patch("reverse_geocode.time.sleep")
+    @patch("reverse_geocode.urllib.request.urlopen")
+    def test_transient_rate_limit_is_retried_until_it_succeeds(self, mock_urlopen, _sleep):
+        body = json.dumps({"address": {"country_code": "us", "ISO3166-2-lvl4": "US-TX"}}).encode()
+        mock_urlopen.side_effect = [self._http_error(429, {"Retry-After": "3"}), BytesIO(body)]
+
+        assert reverse_geocode(30.0, -97.0) == ("US", "TX")
+
+        assert mock_urlopen.call_count == 2
+
+    @patch("reverse_geocode.time.sleep")
+    @patch("reverse_geocode.urllib.request.urlopen")
+    def test_non_transient_http_error_is_not_retried(self, mock_urlopen, _sleep):
+        mock_urlopen.side_effect = self._http_error(404)
+
+        with pytest.raises(urllib.error.HTTPError):
+            reverse_geocode(30.0, -97.0)
+
+        mock_urlopen.assert_called_once()
+
+    @patch("reverse_geocode.time.sleep")
+    @patch("reverse_geocode.urllib.request.urlopen")
+    def test_persistent_transient_error_raises_after_the_retry_budget(self, mock_urlopen, _sleep):
+        mock_urlopen.side_effect = self._http_error(429)
+
+        with pytest.raises(urllib.error.HTTPError):
+            reverse_geocode(30.0, -97.0)
+
+        assert mock_urlopen.call_count == MAX_FETCH_ATTEMPTS
 
 
 class TestCacheFile:

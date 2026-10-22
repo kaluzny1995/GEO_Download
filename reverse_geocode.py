@@ -15,11 +15,14 @@ already covers never reaches the API.
 
 Nominatim's usage policy allows at most one request per second from an
 identifiable client, so every request waits :data:`REQUEST_DELAY_SECONDS`
-first. A coordinate the API answers with no country (open ocean) is cached as
+first, and a transient failure — the 429 rate limit a large catch-up run can
+briefly trigger, a gateway error or a network blip — is retried with a doubling
+backoff (:data:`MAX_FETCH_ATTEMPTS`) instead of failing the coordinate. A
+coordinate the API answers with no country (open ocean) is cached as
 an empty ``country_code`` — that is a real answer, and the ETL turns it into
-its fallback ``ZZ``. Requests that fail are *not* cached: they are retried on
-the next run, and when nothing could be fetched the download fails instead of
-silently leaving holes in the lookup.
+its fallback ``ZZ``. Requests that keep failing are *not* cached: they are
+retried on the next run, and when nothing could be fetched the download fails
+instead of silently leaving holes in the lookup.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ import json
 import logging
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Sequence
@@ -41,6 +45,51 @@ GEOCODE_COLUMNS = ("geocode_country", "geocode_state")
 KEY_DECIMALS = 4
 USER_AGENT = "GEO_Download/1.0"
 REQUEST_DELAY_SECONDS = 1.1
+# Transient endpoint failures (Nominatim rate limiting, gateway hiccups) are retried with a
+# doubling backoff instead of failing the coordinate — a large catch-up run can briefly exceed
+# the 1 req/s policy, and the data is already downloaded by the time geocoding runs.
+MAX_FETCH_ATTEMPTS = 5
+RETRY_BACKOFF_SECONDS = 2.0
+RETRY_BACKOFF_MAX_SECONDS = 60.0
+TRANSIENT_HTTP_STATUS = frozenset({429, 500, 502, 503, 504})
+
+
+def _retry_delay(attempt: int, error: urllib.error.HTTPError | None) -> float:
+    """Backoff before retrying *attempt* (0-based) — honors a `Retry-After` hint when present.
+
+    Args:
+        attempt: Zero-based index of the attempt that just failed.
+        error: The HTTP error being retried, or ``None`` for a network error.
+
+    Returns:
+        Seconds to wait: the endpoint's `Retry-After` (capped) when supplied on a
+        transient HTTP error, otherwise an exponential backoff capped at
+        :data:`RETRY_BACKOFF_MAX_SECONDS`.
+    """
+    if isinstance(error, urllib.error.HTTPError) and error.code in TRANSIENT_HTTP_STATUS:
+        retry_after = error.headers.get("Retry-After") if error.headers else None
+        if retry_after:
+            try:
+                return min(float(retry_after), RETRY_BACKOFF_MAX_SECONDS)
+            except ValueError:
+                pass
+    return min(RETRY_BACKOFF_SECONDS * (2**attempt), RETRY_BACKOFF_MAX_SECONDS)
+
+
+def _is_transient(error: BaseException) -> bool:
+    """Whether *error* is worth retrying (rate limiting, gateway errors, network blips).
+
+    Args:
+        error: The exception raised by a fetch attempt.
+
+    Returns:
+        ``True`` for transient HTTP statuses (:data:`TRANSIENT_HTTP_STATUS`) and for
+        network-level :class:`urllib.error.URLError`; ``False`` for anything else
+        (e.g. a 4xx that will not go away on its own).
+    """
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in TRANSIENT_HTTP_STATUS
+    return isinstance(error, urllib.error.URLError)
 
 
 def coord_key(latitude: float | str, longitude: float | str) -> str:
@@ -83,21 +132,33 @@ def parse_response(data: dict) -> tuple[str, str]:
     return country, state
 
 
-def reverse_geocode(latitude: float, longitude: float, api_url: str = DEFAULT_API_URL) -> tuple[str, str]:
-    """Query the endpoint for one coordinate.
+def reverse_geocode(
+    latitude: float,
+    longitude: float,
+    api_url: str = DEFAULT_API_URL,
+    *,
+    logger: logging.Logger | None = None,
+) -> tuple[str, str]:
+    """Query the endpoint for one coordinate, retrying transient failures.
+
+    Transient errors (:data:`TRANSIENT_HTTP_STATUS` — e.g. Nominatim's 429 rate limit during a
+    large catch-up — plus network :class:`urllib.error.URLError` blips) are retried up to
+    :data:`MAX_FETCH_ATTEMPTS` times with a doubling backoff (honoring a `Retry-After` hint).
+    A coordinate that is still failing afterwards raises, so it is retried on the next run.
 
     Args:
         latitude: Latitude in decimal degrees.
         longitude: Longitude in decimal degrees.
         api_url: Reverse geocode endpoint.
+        logger: Logger for retry messages; defaults to the module logger.
 
     Returns:
         ``(country_code, state_province)`` from :func:`parse_response`.
 
     Raises:
-        OSError: When the request fails (no network, HTTP error, bad body).
+        OSError: When the request keeps failing (no network, non-transient HTTP error, bad body).
     """
-    time.sleep(REQUEST_DELAY_SECONDS)
+    log = logger or logging.getLogger(__name__)
     query = urllib.parse.urlencode(
         {
             "lat": float(latitude),
@@ -109,9 +170,24 @@ def reverse_geocode(latitude: float, longitude: float, api_url: str = DEFAULT_AP
         }
     )
     request = urllib.request.Request(f"{api_url}?{query}", headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        data = json.load(response)
-    return parse_response(data)
+
+    for attempt in range(MAX_FETCH_ATTEMPTS):
+        time.sleep(REQUEST_DELAY_SECONDS)
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                data = json.load(response)
+            return parse_response(data)
+        except Exception as exc:
+            if not _is_transient(exc) or attempt == MAX_FETCH_ATTEMPTS - 1:
+                raise
+            delay = _retry_delay(attempt, exc if isinstance(exc, urllib.error.HTTPError) else None)
+            log.warning(
+                f"Reverse geocode {latitude},{longitude} transient failure "
+                f"({exc}) — retrying in {delay:.1f}s (attempt {attempt + 1}/{MAX_FETCH_ATTEMPTS})"
+            )
+            time.sleep(delay)
+
+    raise OSError(f"reverse geocode failed for {latitude},{longitude}")  # pragma: no cover
 
 
 def load_cache(path: str = DEFAULT_REVERSE_GEOCODE_FILE) -> dict[str, tuple[str, str]]:
@@ -191,7 +267,7 @@ def geocode_map(
     for key in missing:
         latitude, longitude = (float(part) for part in key.split(","))
         try:
-            mapping[key] = reverse_geocode(latitude, longitude, api_url)
+            mapping[key] = reverse_geocode(latitude, longitude, api_url, logger=log)
         except Exception as exc:
             failures.append(f"{key} ({exc})")
         else:
