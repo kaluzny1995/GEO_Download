@@ -6,64 +6,43 @@ import pytest
 from model import AppConfig, ELoadType, LoadParams, SourceConfig
 
 
-def test_source_config_creation():
-    # Arrange
-    # Act
-    source = SourceConfig(
-        type="usgs_earthquake",
-        enabled=True,
-        api_url="https://example.com/api",
-        feed_url="https://example.com/feed",
-        start_date="2026-09-01",
-        output_folder="data/test",
-        output_file_pattern="test_{date}.csv"
-    )
+def _source_config(**overrides) -> SourceConfig:
+    """Build the standard test SourceConfig (all 7 required kwargs) with per-test overrides."""
+    kwargs = {
+        "type": "usgs_earthquake",
+        "enabled": True,
+        "api_url": "https://example.com/api",
+        "feed_url": "https://example.com/feed",
+        "start_date": "2026-09-01",
+        "output_folder": "data/test",
+        "output_file_pattern": "test_{date}.csv",
+    }
+    kwargs.update(overrides)
+    return SourceConfig(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected_previous_day"),
+    [
+        ({}, True),
+        ({"is_date_to_previous_day": False}, False),
+    ],
+)
+def test_source_config_creation_and_date_flag(overrides, expected_previous_day):
+    # Arrange & Act
+    source = _source_config(**overrides)
 
     # Assert
     assert source.type == "usgs_earthquake"
     assert source.enabled is True
     assert source.api_url == "https://example.com/api"
-
-
-def test_source_config_is_date_to_previous_day_default():
-    # Arrange
-    # Act
-    source = SourceConfig(
-        type="usgs_earthquake",
-        enabled=True,
-        api_url="https://example.com/api",
-        feed_url="https://example.com/feed",
-        start_date="2026-09-01",
-        output_folder="data/test",
-        output_file_pattern="test_{date}.csv"
-    )
-
-    # Assert
-    assert source.is_date_to_previous_day is True
-
-
-def test_source_config_is_date_to_previous_day_false():
-    # Arrange
-    # Act
-    source = SourceConfig(
-        type="usgs_earthquake",
-        enabled=True,
-        api_url="https://example.com/api",
-        feed_url="https://example.com/feed",
-        start_date="2026-09-01",
-        output_folder="data/test",
-        output_file_pattern="test_{date}.csv",
-        is_date_to_previous_day=False
-    )
-
-    # Assert
-    assert source.is_date_to_previous_day is False
+    assert source.is_date_to_previous_day is expected_previous_day
 
 
 def test_app_config_from_json(tmp_path):
     # Arrange
     config_file = tmp_path / "config.json"
-    config_file.write_text('''
+    config_file.write_text("""
     {
         "sources": {
             "TestSource": {
@@ -77,7 +56,7 @@ def test_app_config_from_json(tmp_path):
             }
         }
     }
-    ''')
+    """)
 
     # Act
     with open(config_file) as f:
@@ -99,7 +78,7 @@ def test_app_config_get_source_by_name():
                 feed_url="https://example.com/feed1",
                 start_date="2026-09-01",
                 output_folder="data/source1",
-                output_file_pattern="source1_{date}.csv"
+                output_file_pattern="source1_{date}.csv",
             )
         }
     )
@@ -120,65 +99,26 @@ def test_app_config_get_source_by_name_not_found():
         config.get_source_by_name("Nonexistent")
 
 
-def test_load_params_from_source_historical(tmp_path):
+@pytest.mark.parametrize(
+    ("overrides", "expected_yesterday"),
+    [
+        ({}, True),
+        ({"is_date_to_previous_day": True}, True),
+        ({"is_date_to_previous_day": False}, False),
+    ],
+)
+def test_load_params_from_source_historical_and_date_to(tmp_path, overrides, expected_yesterday):
     # Arrange
-    source = SourceConfig(
-        type="usgs_earthquake",
-        enabled=True,
-        api_url="https://example.com/api",
-        feed_url="https://example.com/feed",
-        start_date="2026-09-01",
-        output_folder=str(tmp_path / "empty_data"),
-        output_file_pattern="test_{date}.csv"
-    )
+    source = _source_config(output_folder=str(tmp_path / "empty_data"), **overrides)
 
     # Act
     load_params = LoadParams.from_source(source)
 
     # Assert
+    start_of_today = dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    expected_date_to = start_of_today - (dt.timedelta(days=1) if expected_yesterday else dt.timedelta(0))
     assert load_params.load_type == ELoadType.HISTORICAL
     assert load_params.date_from == dt.datetime(2026, 9, 1)
-
-
-def test_load_params_date_to_previous_day_true(tmp_path):
-    # Arrange
-    source = SourceConfig(
-        type="usgs_earthquake",
-        enabled=True,
-        api_url="https://example.com/api",
-        feed_url="https://example.com/feed",
-        start_date="2026-09-01",
-        output_folder=str(tmp_path / "empty_data"),
-        output_file_pattern="test_{date}.csv",
-        is_date_to_previous_day=True
-    )
-
-    # Act
-    load_params = LoadParams.from_source(source)
-
-    # Assert
-    expected_date_to = dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(days=1)
-    assert load_params.date_to == expected_date_to
-
-
-def test_load_params_date_to_previous_day_false(tmp_path):
-    # Arrange
-    source = SourceConfig(
-        type="usgs_earthquake",
-        enabled=True,
-        api_url="https://example.com/api",
-        feed_url="https://example.com/feed",
-        start_date="2026-09-01",
-        output_folder=str(tmp_path / "empty_data"),
-        output_file_pattern="test_{date}.csv",
-        is_date_to_previous_day=False
-    )
-
-    # Act
-    load_params = LoadParams.from_source(source)
-
-    # Assert
-    expected_date_to = dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     assert load_params.date_to == expected_date_to
 
 
@@ -195,7 +135,7 @@ def test_load_params_from_source_incremental(tmp_path):
         feed_url="https://example.com/feed",
         start_date="2026-09-01",
         output_folder=str(folder),
-        output_file_pattern="test_{date}.csv"
+        output_file_pattern="test_{date}.csv",
     )
 
     # Act

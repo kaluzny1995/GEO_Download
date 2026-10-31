@@ -236,3 +236,12 @@ flowchart TD
     M -->|per day| N["save_csv<br/>data/SourceName/ + output_file_pattern"]
     N -->|logging| O["logs/SourceName/download_*.log"]
 ```
+
+## Related Projects
+
+GEO_Download is the first stage of the GIS data pipeline. The five projects sit as siblings under `GeographicData/`:
+
+- **[GEO_ETL](../GEO_ETL)** — PySpark ETL that loads the CSVs written here into Supabase; its `data.directory` is `../GEO_Download/data`.
+- **[GEO_E2E](../GEO_E2E)** — Airflow orchestrator that schedules `run_download.py`; also hosts the `docker-compose.yaml` running the Spark cluster GEO_ETL connects to.
+- **[GEO_API](../GEO_API)** — FastAPI layer serving the finished Supabase data (`geo.data_quality`, `geo.union_etl`) over REST.
+- **[GEO_APP](../GEO_APP)** — React dashboard rendering what GEO_API returns.

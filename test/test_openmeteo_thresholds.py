@@ -165,6 +165,16 @@ class _ScriptedResponse:
     def __init__(self, status_code: int, payload: dict | None = None) -> None:
         self.status_code = status_code
         self._payload = payload
+        self.closed = False
+
+    def __enter__(self) -> "_ScriptedResponse":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self.closed = True
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
@@ -282,29 +292,36 @@ class TestMakeFetcher:
 
     def test_answers_with_the_payload_and_paces_itself(self, monkeypatch):
         payload = {"daily": {"time": [], "river_discharge": []}}
-        fetch, session, waits, pauses = self._fetcher([_ScriptedResponse(200, payload)], monkeypatch)
+        response = _ScriptedResponse(200, payload)
+        fetch, session, waits, pauses = self._fetcher([response], monkeypatch)
 
         assert fetch(RIVER) == payload
         assert len(session.requests) == 1
         assert waits == []
         assert pauses == [1.0]
+        assert response.closed
 
     def test_waits_out_the_hourly_limit_and_retries(self, monkeypatch):
         payload = {"daily": {"time": []}}
-        responses = [_ScriptedResponse(429), _ScriptedResponse(200, payload)]
-        fetch, session, waits, pauses = self._fetcher(responses, monkeypatch)
+        limited = _ScriptedResponse(429)
+        answered = _ScriptedResponse(200, payload)
+        fetch, session, waits, pauses = self._fetcher([limited, answered], monkeypatch)
 
         assert fetch(RIVER) == payload
         assert len(session.requests) == 2
         assert waits == [7.0]
         assert pauses == [7.0, 1.0]
+        assert limited.closed
+        assert answered.closed
 
     def test_gives_up_once_the_limit_persists(self, monkeypatch):
-        fetch, session, waits, _ = self._fetcher([_ScriptedResponse(429)], monkeypatch, max_hour_waits=1)
+        limited = _ScriptedResponse(429)
+        fetch, session, waits, _ = self._fetcher([limited], monkeypatch, max_hour_waits=1)
 
         assert fetch(RIVER) is None
         assert len(session.requests) == 2
         assert waits == [7.0, 7.0]
+        assert limited.closed
 
     def test_network_errors_are_reported_as_none(self, monkeypatch):
         fetch, _, _, pauses = self._fetcher([RequestsConnectionError("boom")], monkeypatch)

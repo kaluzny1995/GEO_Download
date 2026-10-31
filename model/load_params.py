@@ -15,7 +15,7 @@ class LoadParams(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     @staticmethod
-    def from_source(source: SourceConfig) -> 'LoadParams':
+    def from_source(source: SourceConfig) -> "LoadParams":
         recent_date = util.get_recent_file_date(source.output_folder)
         start_date = dt.datetime.strptime(source.start_date, "%Y-%m-%d")
 
@@ -24,5 +24,5 @@ class LoadParams(BaseModel):
             date_from=start_date if recent_date is None else recent_date + dt.timedelta(days=1),
             date_to=dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(days=1)
             if source.is_date_to_previous_day
-            else dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            else dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0),
         )

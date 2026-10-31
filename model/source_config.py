@@ -4,7 +4,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 class SourceConfig(BaseModel):
-    """ Config for a single data source """
+    """Config for a single data source"""
+
     type: str
     enabled: bool
     api_url: str

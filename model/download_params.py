@@ -9,5 +9,5 @@ class DownloadParams(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     @staticmethod
-    def from_source(source: SourceConfig) -> 'DownloadParams':
+    def from_source(source: SourceConfig) -> "DownloadParams":
         return DownloadParams(source=source)

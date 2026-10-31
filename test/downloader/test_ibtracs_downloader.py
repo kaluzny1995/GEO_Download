@@ -1,6 +1,7 @@
 import datetime as dt
 from unittest.mock import MagicMock, patch
 
+import pytest
 import requests.exceptions
 
 from downloader.ibtracs import IBTrACSDownloader
@@ -26,76 +27,47 @@ def _csv_to_bytes(text: str) -> list[bytes]:
     return [line.encode() for line in text.splitlines()]
 
 
-def test_build_url():
-    logger = MockLogger()
-    downloader = IBTrACSDownloader(logger=logger)
+@pytest.mark.parametrize(
+    ("downloader_kwargs", "expected_dataset_file"),
+    [
+        ({}, "ibtracs.last3years.list.v04r01.csv"),
+        ({"dataset": "all"}, "ibtracs.all.list.v04r01.csv"),
+    ],
+)
+def test_build_url(downloader_kwargs, expected_dataset_file):
+    downloader = IBTrACSDownloader(logger=MockLogger(), **downloader_kwargs)
     url = downloader._build_url(TEST_BASE_URL)
-    assert "ibtracs.last3years.list.v04r01.csv" in url
+    assert expected_dataset_file in url
     assert "ncei.noaa.gov" in url
 
 
-def test_build_url_custom_dataset():
-    logger = MockLogger()
-    downloader = IBTrACSDownloader(logger=logger, dataset="all")
-    url = downloader._build_url(TEST_BASE_URL)
-    assert "ibtracs.all.list.v04r01.csv" in url
-
-
-def test_download_by_date_range_success():
+@pytest.mark.parametrize(
+    ("start_date", "end_date", "expected_times"),
+    [
+        (
+            dt.datetime(2026, 9, 1),
+            dt.datetime(2026, 9, 2),
+            ["2026-09-01 06:00:00", "2026-09-01 12:00:00", "2026-09-01 18:00:00"],
+        ),
+        (dt.datetime(2026, 9, 2), dt.datetime(2026, 9, 3), ["2026-09-02 06:00:00"]),
+        (dt.datetime(2026, 10, 1), dt.datetime(2026, 10, 2), []),
+    ],
+)
+def test_download_by_date_range(start_date, end_date, expected_times):
+    """Only records in [start_date, end_date) are returned — ISO_TIME resolved by header name."""
     logger = MockLogger()
     downloader = IBTrACSDownloader(logger=logger)
 
     mock_response = MagicMock()
     mock_response.iter_lines.return_value = _csv_to_bytes(SAMPLE_CSV)
     mock_response.raise_for_status = MagicMock()
-
-    start_date = dt.datetime(2026, 9, 1)
-    end_date = dt.datetime(2026, 9, 2)
 
     with patch.object(downloader.session, "get", return_value=mock_response) as mock_get:
         result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
 
-    assert len(result) == 3
-    for record in result:
-        assert record["ISO_TIME"][:10] == "2026-09-01"
+    assert [record["ISO_TIME"] for record in result] == expected_times
     called_url = mock_get.call_args[0][0]
     assert "ibtracs.last3years.list.v04r01.csv" in called_url
-
-
-def test_download_by_date_range_filters_correctly():
-    """Verify that only records in [start_date, end_date) are returned."""
-    logger = MockLogger()
-    downloader = IBTrACSDownloader(logger=logger)
-
-    mock_response = MagicMock()
-    mock_response.iter_lines.return_value = _csv_to_bytes(SAMPLE_CSV)
-    mock_response.raise_for_status = MagicMock()
-
-    start_date = dt.datetime(2026, 9, 2)
-    end_date = dt.datetime(2026, 9, 3)
-
-    with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
-
-    assert len(result) == 1
-    assert result[0]["ISO_TIME"] == "2026-09-02 06:00:00"
-
-
-def test_download_by_date_range_no_match():
-    logger = MockLogger()
-    downloader = IBTrACSDownloader(logger=logger)
-
-    mock_response = MagicMock()
-    mock_response.iter_lines.return_value = _csv_to_bytes(SAMPLE_CSV)
-    mock_response.raise_for_status = MagicMock()
-
-    start_date = dt.datetime(2026, 10, 1)
-    end_date = dt.datetime(2026, 10, 2)
-
-    with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
-
-    assert result == []
 
 
 def test_download_by_date_range_skips_units_row():
@@ -165,32 +137,25 @@ def test_download_by_date_range_missing_iso_time_column():
     assert any("has no ISO_TIME column" in msg for _, msg in logger.messages)
 
 
-def test_download_by_date_range_http_error():
-    logger = MockLogger()
-    downloader = IBTrACSDownloader(logger=logger)
-
-    mock_response = MagicMock()
-    mock_response.status_code = 500
-    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
-
-    start_date = dt.datetime(2026, 9, 1)
-    end_date = dt.datetime(2026, 9, 2)
-
-    with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
-
-    assert result == []
-    assert any("Failed to fetch" in msg for _, msg in logger.messages)
-
-
-def test_download_by_date_range_connection_error():
+@pytest.mark.parametrize("error_mode", ["http-error", "connection-error"])
+def test_download_by_date_range_fetch_errors(error_mode):
     logger = MockLogger()
     downloader = IBTrACSDownloader(logger=logger)
 
     start_date = dt.datetime(2026, 9, 1)
     end_date = dt.datetime(2026, 9, 2)
 
-    with patch.object(downloader.session, "get", side_effect=requests.exceptions.ConnectionError("Connection refused")):
+    if error_mode == "http-error":
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
+        get_patcher = patch.object(downloader.session, "get", return_value=mock_response)
+    else:
+        get_patcher = patch.object(
+            downloader.session, "get", side_effect=requests.exceptions.ConnectionError("Connection refused")
+        )
+
+    with get_patcher:
         result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
 
     assert result == []

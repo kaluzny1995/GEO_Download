@@ -35,18 +35,17 @@ def _write(path, content: str) -> str:
 
 
 class TestCountRecords:
-    def test_counts_data_rows_without_the_header(self, tmp_path):
-        file_path = _write(tmp_path / "events_2026-09-01.csv", "id,name\n1,a\n2,b\n3,c\n")
-        assert count_records(file_path) == 3
-
-    def test_header_only_file_has_no_records(self, tmp_path):
-        assert count_records(_write(tmp_path / "empty.csv", "id,name\n")) == 0
-
-    def test_zero_byte_file_has_no_records(self, tmp_path):
-        assert count_records(_write(tmp_path / "blank.csv", "")) == 0
-
-    def test_newline_inside_a_quoted_field_is_not_a_new_record(self, tmp_path):
-        assert count_records(_write(tmp_path / "quoted.csv", 'id,note\n1,"line one\nline two"\n2,x\n')) == 2
+    @pytest.mark.parametrize(
+        ("filename", "content", "expected"),
+        [
+            ("events_2026-09-01.csv", "id,name\n1,a\n2,b\n3,c\n", 3),
+            ("empty.csv", "id,name\n", 0),
+            ("blank.csv", "", 0),
+            ("quoted.csv", 'id,note\n1,"line one\nline two"\n2,x\n', 2),
+        ],
+    )
+    def test_counts_records(self, tmp_path, filename, content, expected):
+        assert count_records(_write(tmp_path / filename, content)) == expected
 
 
 class TestCountSource:
@@ -61,13 +60,9 @@ class TestCountSource:
 
         assert count == SourceCount(source="Source", files=2, records=3)
 
-    def test_missing_folder_counts_zero(self, tmp_path):
-        count = count_source("Source", _source(str(tmp_path / "does_not_exist")))
-
-        assert count == SourceCount(source="Source", files=0, records=0)
-
-    def test_empty_folder_counts_zero(self, tmp_path):
-        count = count_source("Source", _source(str(tmp_path)))
+    @pytest.mark.parametrize("folder", ["does_not_exist", "."])
+    def test_missing_or_empty_folder_counts_zero(self, tmp_path, folder):
+        count = count_source("Source", _source(str(tmp_path / folder)))
 
         assert count == SourceCount(source="Source", files=0, records=0)
 

@@ -3,9 +3,7 @@ from __future__ import annotations
 import abc
 import csv
 import datetime as dt
-import io
 import logging
-from collections.abc import Callable
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -144,41 +142,3 @@ class BaseDownloader(abc.ABC):
             return records
         finally:
             response.close()
-
-    def _download_csv_with_filter(self, url: str, filter_func: Callable[[str], list[dict]] | None = None) -> list[dict]:
-        """Download CSV from URL with optional custom filter/parser.
-
-        Args:
-            url: URL to download from
-            filter_func: Optional callable that takes (text: str) -> list[dict]
-                         If provided, uses this instead of default DictReader parsing.
-        """
-        self.logger.info(f"Downloading CSV from: {url}")
-        response = self._fetch_response(url)
-        if response is None:
-            return []
-
-        try:
-            text = response.text
-        finally:
-            response.close()
-
-        if filter_func:
-            records = filter_func(text)
-        else:
-            reader = csv.DictReader(io.StringIO(text))
-            records = list(reader)
-
-        self.logger.info(f"Downloaded {len(records)} records")
-        return records
-
-    def _fetch_response(self, url: str) -> requests.Response | None:
-        """Fetch a response from URL, return None on error."""
-        try:
-            response = self.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            self.logger.info("Download successful")
-            return response
-        except RequestException as e:
-            self.logger.error(f"Download failed: {e}")
-            return None

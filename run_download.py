@@ -13,24 +13,25 @@ from model import AppConfig, LoadParams, SourceConfig
 
 
 def parse_args(config: AppConfig) -> argparse.Namespace:
-    """ Parses command line arguments """
+    """Parses command line arguments"""
     source_names = [name for name, src in config.sources.items() if src.enabled]
     parser = argparse.ArgumentParser(description="GIS Data Downloader Python 3.11 application.")
 
-    parser.add_argument("source", type=str, choices=source_names,
-                        help=f"data source to download, available: {source_names}")
+    parser.add_argument(
+        "source", type=str, choices=source_names, help=f"data source to download, available: {source_names}"
+    )
 
     return parser.parse_args()
 
 
 def create_folders(source: SourceConfig):
-    """ Creates folders for data if not exist """
+    """Creates folders for data if not exist"""
     if not os.path.exists(source.output_folder):
         os.makedirs(source.output_folder)
 
 
 def show_params(source_name: str, source: SourceConfig, load_params: LoadParams, logger: logging.Logger) -> None:
-    """ Shows the parameters and its values """
+    """Shows the parameters and its values"""
     print("Source name:", source_name)
     print("Source type:", source.type)
     print("API URL:", source.api_url)
@@ -50,9 +51,10 @@ def show_params(source_name: str, source: SourceConfig, load_params: LoadParams,
     logger.info(f"End date: {load_params.date_to}")
 
 
-def save_csv(data: list[dict], output_folder: str, output_file_pattern: str,
-             date: dt.datetime, logger: logging.Logger) -> bool:
-    """ Saves data to CSV file. Returns True only when a file was actually written. """
+def save_csv(
+    data: list[dict], output_folder: str, output_file_pattern: str, date: dt.datetime, logger: logging.Logger
+) -> bool:
+    """Saves data to CSV file. Returns True only when a file was actually written."""
     output_file = output_file_pattern.format(date=date.strftime("%Y-%m-%d"))
     output_path = f"{output_folder}/{output_file}"
 
@@ -78,9 +80,10 @@ def save_csv(data: list[dict], output_folder: str, output_file_pattern: str,
     return True
 
 
-def download_source(source: SourceConfig, source_name: str, load_params: LoadParams,
-                    dl: BaseDownloader, logger: logging.Logger) -> None:
-    """ Downloads every day of the load range and saves it as CSV, then asks the
+def download_source(
+    source: SourceConfig, source_name: str, load_params: LoadParams, dl: BaseDownloader, logger: logging.Logger
+) -> None:
+    """Downloads every day of the load range and saves it as CSV, then asks the
     downloader for its auxiliary files (source-specific references the ETL joins).
 
     Raises RuntimeError when the run produced no files at all (nothing to
@@ -102,9 +105,11 @@ def download_source(source: SourceConfig, source_name: str, load_params: LoadPar
             saved_files += 1
 
     if saved_files == 0:
-        message = (f"No files downloaded for {source_name} in "
-                   f"{load_params.date_from.strftime('%Y-%m-%d')}..{load_params.date_to.strftime('%Y-%m-%d')} — "
-                   "nothing to ingest.")
+        message = (
+            f"No files downloaded for {source_name} in "
+            f"{load_params.date_from.strftime('%Y-%m-%d')}..{load_params.date_to.strftime('%Y-%m-%d')} — "
+            "nothing to ingest."
+        )
         logger.error(message)
         raise RuntimeError(message)
 
@@ -133,8 +138,10 @@ def main() -> int:
     source = config.get_source_by_name(source_name)
 
     # Setup logger
-    logger = util.setup_logger(name=f"download_{source_name}",
-                               log_file=f"logs/{source_name}/download_{source_name}_{dt.datetime.now().isoformat()}.log")
+    logger = util.setup_logger(
+        name=f"download_{source_name}",
+        log_file=f"logs/{source_name}/download_{source_name}_{dt.datetime.now().isoformat()}.log",
+    )
 
     print(f"---- {source_name} Downloader ----\n")
     logger.info(f"---- {source_name} Downloader ----")

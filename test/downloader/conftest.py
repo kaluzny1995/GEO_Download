@@ -27,6 +27,11 @@ class MockLogger(logging.Logger):
         self.messages.append(("WARNING", msg))
 
 
+def create_downloader(downloader_cls: type, logger: logging.Logger | None = None, **kwargs: Any) -> Any:
+    """Shared factory: build a downloader for a test with a MockLogger unless one is given."""
+    return downloader_cls(logger=logger if logger is not None else MockLogger(), **kwargs)
+
+
 @pytest.fixture(autouse=True)
 def _isolated_reverse_geocode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point every downloader at a throwaway lookup and stub the geocode API.

@@ -225,20 +225,16 @@ def test_download_leaves_the_size_empty_for_a_day_outside_the_product(mock_get_j
     assert records[0]["avalanche_size"] == ""
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "FeatureCollection", "features": []},
+        None,
+    ],
+)
 @patch("downloader.base.BaseDownloader._get_json")
-def test_download_empty(mock_get_json):
-    mock_get_json.return_value = {"type": "FeatureCollection", "features": []}
-    dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
-    dl.logger = MagicMock()
-    start = dt.datetime(2026, 9, 15)
-    end = dt.datetime(2026, 9, 15)
-    records = dl.download_by_date_range("unused", start, end)
-    assert records == []
-
-
-@patch("downloader.base.BaseDownloader._get_json")
-def test_download_no_data(mock_get_json):
-    mock_get_json.return_value = None
+def test_download_empty_or_no_data(mock_get_json, payload):
+    mock_get_json.return_value = payload
     dl = AvalancheOrgDownloader.__new__(AvalancheOrgDownloader)
     dl.logger = MagicMock()
     start = dt.datetime(2026, 9, 15)

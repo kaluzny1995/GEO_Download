@@ -97,6 +97,22 @@ def _stored(notice_identifier, vnum, **values):
     return (_notice_key(notice_identifier, vnum), mapping)
 
 
+def _notice_response() -> MagicMock:
+    """Notice response mock yielding itself from the ``with`` of ``_fetch_notice``.
+
+    Like :class:`requests.Response`, leaving the block closes the response
+    (without swallowing exceptions).
+    """
+    response = MagicMock()
+
+    def _exit(*_exc_info) -> None:
+        response.close()
+
+    response.__enter__.return_value = response
+    response.__exit__.side_effect = _exit
+    return response
+
+
 def _record(notice_identifier=NOTICE_ID, vnum="311120", **overrides):
     record = {
         "volcano_name": "Great Sitkin",
@@ -255,32 +271,27 @@ def test_download_by_date_range_filters_by_date(tmp_path):
     assert result[0]["latitude"] == ""
 
 
-def test_download_by_date_range_empty(tmp_path):
+@pytest.mark.parametrize(
+    ("payload", "expect_no_data_log"),
+    [
+        ([], True),
+        (None, False),
+    ],
+)
+def test_download_by_date_range_empty_or_none_response(tmp_path, payload, expect_no_data_log):
     logger = MockLogger()
     downloader = _downloader(tmp_path, logger=logger)
 
     mock_response = MagicMock()
-    mock_response.json.return_value = []
+    mock_response.json.return_value = payload
     mock_response.raise_for_status = MagicMock()
 
     with patch.object(downloader.session, "get", return_value=mock_response):
         result = downloader.download_by_date_range(TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 17))
 
     assert len(result) == 0
-    assert any("No data received" in msg for _, msg in logger.messages)
-
-
-def test_download_by_date_range_none_response(tmp_path):
-    downloader = _downloader(tmp_path)
-
-    mock_response = MagicMock()
-    mock_response.json.return_value = None
-    mock_response.raise_for_status = MagicMock()
-
-    with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range(TEST_BASE_URL, dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 17))
-
-    assert len(result) == 0
+    if expect_no_data_log:
+        assert any("No data received" in msg for _, msg in logger.messages)
 
 
 def test_download_by_date_range_connection_error(tmp_path):
@@ -365,7 +376,7 @@ class TestLookupFile:
 class TestFetchNotice:
     def test_returns_the_json_body(self, tmp_path):
         downloader = _downloader(tmp_path)
-        response = MagicMock()
+        response = _notice_response()
         response.json.return_value = PAYLOAD
 
         with patch.object(downloader.session, "get", return_value=response) as mocked:
@@ -373,6 +384,7 @@ class TestFetchNotice:
 
         mocked.assert_called_once()
         assert mocked.call_args.args[0] == f"{NOTICE_API_URL}/{NOTICE_ID}"
+        response.close.assert_called_once()
 
     def test_connection_error_raises_runtime_error(self, tmp_path):
         downloader = _downloader(tmp_path)
@@ -385,7 +397,7 @@ class TestFetchNotice:
 
     def test_non_json_body_raises_runtime_error(self, tmp_path):
         downloader = _downloader(tmp_path)
-        response = MagicMock()
+        response = _notice_response()
         response.json.side_effect = ValueError("no json")
 
         with (
@@ -394,9 +406,11 @@ class TestFetchNotice:
         ):
             downloader._fetch_notice(NOTICE_ID)
 
+        response.close.assert_called_once()
+
     def test_non_object_body_raises_runtime_error(self, tmp_path):
         downloader = _downloader(tmp_path)
-        response = MagicMock()
+        response = _notice_response()
         response.json.return_value = [1, 2]
 
         with (
@@ -404,6 +418,8 @@ class TestFetchNotice:
             pytest.raises(RuntimeError, match="returned no payload"),
         ):
             downloader._fetch_notice(NOTICE_ID)
+
+        response.close.assert_called_once()
 
 
 class TestResolveNotices:

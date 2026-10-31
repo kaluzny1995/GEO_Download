@@ -16,18 +16,28 @@ class AnotherMockDownloader:
 
 @pytest.fixture(autouse=True)
 def clear_registry():
-    """ Clears downloader registry before each test """
+    """Clears downloader registry before each test"""
     DownloaderFactory.clear()
     yield
     DownloaderFactory.clear()
 
 
-def test_register_and_create():
+@pytest.mark.parametrize(
+    "source_type",
+    [
+        ESourceType.USGS_EARTHQUAKE,
+        ESourceType.GDACS,
+        ESourceType.EONET,
+        ESourceType.OPENMETEO_FLOOD,
+        ESourceType.USGS_NWIS,
+    ],
+)
+def test_register_and_create(source_type):
     # Arrange
-    DownloaderFactory.register(ESourceType.USGS_EARTHQUAKE, MockDownloader)
+    DownloaderFactory.register(source_type, MockDownloader)
 
     # Act
-    downloader = DownloaderFactory.create(ESourceType.USGS_EARTHQUAKE)
+    downloader = DownloaderFactory.create(source_type)
 
     # Assert
     assert isinstance(downloader, MockDownloader)
@@ -79,47 +89,3 @@ def test_register_overwrite():
 
     # Assert
     assert isinstance(downloader, AnotherMockDownloader)
-
-
-def test_register_gdacs():
-    # Arrange
-    DownloaderFactory.register(ESourceType.GDACS, MockDownloader)
-
-    # Act
-    downloader = DownloaderFactory.create(ESourceType.GDACS)
-
-    # Assert
-    assert isinstance(downloader, MockDownloader)
-
-
-def test_register_eonet():
-    # Arrange
-    DownloaderFactory.register(ESourceType.EONET, MockDownloader)
-
-    # Act
-    downloader = DownloaderFactory.create(ESourceType.EONET)
-
-    # Assert
-    assert isinstance(downloader, MockDownloader)
-
-
-def test_register_openmeteo_flood():
-    # Arrange
-    DownloaderFactory.register(ESourceType.OPENMETEO_FLOOD, MockDownloader)
-
-    # Act
-    downloader = DownloaderFactory.create(ESourceType.OPENMETEO_FLOOD)
-
-    # Assert
-    assert isinstance(downloader, MockDownloader)
-
-
-def test_register_usgs_nwis():
-    # Arrange
-    DownloaderFactory.register(ESourceType.USGS_NWIS, MockDownloader)
-
-    # Act
-    downloader = DownloaderFactory.create(ESourceType.USGS_NWIS)
-
-    # Assert
-    assert isinstance(downloader, MockDownloader)

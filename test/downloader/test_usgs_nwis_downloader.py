@@ -9,7 +9,7 @@ import pytest
 
 from downloader.base import BaseDownloader
 from downloader.usgs_nwis import FLOOD_CATEGORY_COLUMNS, NO_FLOODING, USGSNWISDownloader
-from test.downloader.conftest import MockLogger
+from test.downloader.conftest import MockLogger, create_downloader
 
 IGNORED_URL = "https://ignored.com"
 IV_URL = "https://waterservices.usgs.gov/nwis/iv/"
@@ -123,11 +123,6 @@ def _flood_categories_file(tmp_path, monkeypatch):
     monkeypatch.setattr(USGSNWISDownloader, "DEFAULT_FLOOD_CATEGORIES_FILE", str(tmp_path / "flood_categories.csv"))
 
 
-def _create_downloader(**kwargs) -> USGSNWISDownloader:
-    kwargs.setdefault("logger", MockLogger())
-    return USGSNWISDownloader(**kwargs)
-
-
 def _mock_json(nwis: dict[str, Any], gauges: dict[str, dict[str, Any]] | None = None):
     """Route ``_get_json`` by URL: NWIS for the water service, per site for NWPS."""
     gauges = gauges or {}
@@ -162,7 +157,7 @@ def _read_reference(path) -> list[dict[str, str]]:
 
 
 def test_build_url():
-    downloader = _create_downloader()
+    downloader = create_downloader(USGSNWISDownloader)
 
     url = downloader._build_url(
         "https://waterservices.usgs.gov/nwis/iv/",
@@ -178,7 +173,7 @@ def test_build_url():
 
 
 def test_build_url_without_stage_parameter():
-    downloader = _create_downloader(stage_parameter_code="")
+    downloader = create_downloader(USGSNWISDownloader, stage_parameter_code="")
 
     url = downloader._build_url(IV_URL, *DATE_RANGE)
 
@@ -187,7 +182,7 @@ def test_build_url_without_stage_parameter():
 
 
 def test_build_records_aggregates_the_day():
-    downloader = _create_downloader()
+    downloader = create_downloader(USGSNWISDownloader)
 
     records = downloader._build_records(SAMPLE_API_RESPONSE)
 
@@ -222,7 +217,7 @@ def test_build_records_aggregates_the_day():
 
 
 def test_build_records_averages_the_readings_of_the_day():
-    downloader = _create_downloader()
+    downloader = create_downloader(USGSNWISDownloader)
 
     records = downloader._build_records(SAMPLE_API_RESPONSE)
 
@@ -233,7 +228,7 @@ def test_build_records_averages_the_readings_of_the_day():
 
 
 def test_build_records_without_a_stage_series_keeps_the_height_empty():
-    downloader = _create_downloader()
+    downloader = create_downloader(USGSNWISDownloader)
 
     records = downloader._build_records(SAMPLE_API_RESPONSE)
 
@@ -243,7 +238,7 @@ def test_build_records_without_a_stage_series_keeps_the_height_empty():
 
 
 def test_build_records_skips_days_without_numeric_readings():
-    downloader = _create_downloader()
+    downloader = create_downloader(USGSNWISDownloader)
 
     assert downloader._build_records(SAMPLE_API_RESPONSE_WITH_NON_NUMERIC) == []
 
@@ -273,7 +268,7 @@ def test_build_records_writes_one_row_per_configured_parameter():
             ]
         }
     }
-    downloader = _create_downloader(parameter_code="00060,00063")
+    downloader = create_downloader(USGSNWISDownloader, parameter_code="00060,00063")
 
     records = downloader._build_records(response)
 
@@ -317,21 +312,18 @@ def test_download_by_date_range_labels_the_peak_stage(tmp_path):
     assert rows[0]["major_stage_ft"] == "14"
 
 
-def test_download_by_date_range_empty():
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"value": {"timeSeries": []}},
+        None,
+    ],
+)
+def test_download_by_date_range_empty_or_no_data(payload):
     logger = MockLogger()
-    downloader = _create_downloader(logger=logger)
+    downloader = create_downloader(USGSNWISDownloader, logger=logger)
 
-    with patch.object(BaseDownloader, "_get_json", return_value={"value": {"timeSeries": []}}):
-        result = downloader.download_by_date_range(IGNORED_URL, *DATE_RANGE)
-
-    assert result == []
-
-
-def test_download_by_date_range_no_data():
-    logger = MockLogger()
-    downloader = _create_downloader(logger=logger)
-
-    with patch.object(BaseDownloader, "_get_json", return_value=None):
+    with patch.object(BaseDownloader, "_get_json", return_value=payload):
         result = downloader.download_by_date_range(IGNORED_URL, *DATE_RANGE)
 
     assert result == []
@@ -428,7 +420,7 @@ def test_ensure_auxiliary_files_leaves_the_reference_unwritten_when_nwps_is_down
 
 def test_download_stamps_geocode_state():
     """Every gauge point is reverse-geocoded into geocode_state."""
-    downloader = _create_downloader()
+    downloader = create_downloader(USGSNWISDownloader)
 
     with patch.object(BaseDownloader, "_get_json", return_value=SAMPLE_API_RESPONSE):
         result = downloader.download_by_date_range(IGNORED_URL, *DATE_RANGE)

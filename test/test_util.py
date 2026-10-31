@@ -7,24 +7,23 @@ import pytest
 import util
 
 
-@pytest.mark.parametrize("start_date, end_date, expected_dates", [
-    (dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 3), [
-        dt.datetime(2026, 9, 1),
-        dt.datetime(2026, 9, 2),
-        dt.datetime(2026, 9, 3)
-    ]),
-    (dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 1), [
-        dt.datetime(2026, 9, 1)
-    ]),
-    (dt.datetime(2026, 12, 30), dt.datetime(2027, 1, 2), [
-        dt.datetime(2026, 12, 30),
-        dt.datetime(2026, 12, 31),
-        dt.datetime(2027, 1, 1),
-        dt.datetime(2027, 1, 2)
-    ]),
-])
-def test_date_range(start_date: dt.datetime, end_date: dt.datetime,
-                    expected_dates: list[dt.datetime]) -> None:
+@pytest.mark.parametrize(
+    "start_date, end_date, expected_dates",
+    [
+        (
+            dt.datetime(2026, 9, 1),
+            dt.datetime(2026, 9, 3),
+            [dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2), dt.datetime(2026, 9, 3)],
+        ),
+        (dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 1), [dt.datetime(2026, 9, 1)]),
+        (
+            dt.datetime(2026, 12, 30),
+            dt.datetime(2027, 1, 2),
+            [dt.datetime(2026, 12, 30), dt.datetime(2026, 12, 31), dt.datetime(2027, 1, 1), dt.datetime(2027, 1, 2)],
+        ),
+    ],
+)
+def test_date_range(start_date: dt.datetime, end_date: dt.datetime, expected_dates: list[dt.datetime]) -> None:
     # Arrange
     # Act
     dates = list(util.date_range(start_date, end_date))
@@ -100,8 +99,7 @@ def test_setup_logger_writes_file_and_mirrors_stdout(tmp_path):
     # Assert — one FileHandler + one plain stdout StreamHandler
     file_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
     stream_handlers = [
-        h for h in logger.handlers
-        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+        h for h in logger.handlers if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
     ]
     assert len(file_handlers) == 1
     assert len(stream_handlers) == 1
@@ -120,8 +118,7 @@ def test_setup_logger_no_duplicate_handlers(tmp_path):
     assert logger1 is logger2
     file_handlers = [h for h in logger1.handlers if isinstance(h, logging.FileHandler)]
     stream_handlers = [
-        h for h in logger1.handlers
-        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+        h for h in logger1.handlers if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
     ]
     assert len(file_handlers) == 1
     assert len(stream_handlers) == 1

@@ -1,6 +1,7 @@
 import datetime as dt
 from unittest.mock import MagicMock, patch
 
+import pytest
 import requests.exceptions
 
 from downloader.usgs_earthquake import USGSEarthquakeDownloader
@@ -26,43 +27,31 @@ def test_download_csv_success():
     assert any("Download successful" in msg for _, msg in logger.messages)
 
 
-def test_download_csv_empty_response():
+@pytest.mark.parametrize("error_mode", ["empty", "http-error", "connection-error"])
+def test_download_csv_failure_modes(error_mode):
     logger = MockLogger()
     downloader = USGSEarthquakeDownloader(logger=logger)
 
-    mock_response = MagicMock()
-    mock_response.iter_lines.return_value = []
-    mock_response.raise_for_status = MagicMock()
+    if error_mode == "empty":
+        mock_response = MagicMock()
+        mock_response.iter_lines.return_value = []
+        mock_response.raise_for_status = MagicMock()
+        get_patcher = patch.object(downloader.session, "get", return_value=mock_response)
+    elif error_mode == "http-error":
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
+        get_patcher = patch.object(downloader.session, "get", return_value=mock_response)
+    else:
+        get_patcher = patch.object(
+            downloader.session, "get", side_effect=requests.exceptions.ConnectionError("Connection refused")
+        )
 
-    with patch.object(downloader.session, "get", return_value=mock_response):
+    with get_patcher:
         result = downloader._download_csv("https://example.com/api?format=csv")
 
     assert result == []
-
-
-def test_download_csv_http_error():
-    logger = MockLogger()
-    downloader = USGSEarthquakeDownloader(logger=logger)
-
-    mock_response = MagicMock()
-    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
-
-    with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader._download_csv("https://example.com/api?format=csv")
-
-    assert result == []
-    assert any("Download failed" in msg for _, msg in logger.messages)
-
-
-def test_download_csv_connection_error():
-    logger = MockLogger()
-    downloader = USGSEarthquakeDownloader(logger=logger)
-
-    with patch.object(downloader.session, "get", side_effect=requests.exceptions.ConnectionError("Connection refused")):
-        result = downloader._download_csv("https://example.com/api?format=csv")
-
-    assert result == []
-    assert any("Download failed" in msg for _, msg in logger.messages)
+    if error_mode != "empty":
+        assert any("Download failed" in msg for _, msg in logger.messages)
 
 
 def test_download_by_date_range():

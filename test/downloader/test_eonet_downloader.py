@@ -1,9 +1,11 @@
 import datetime as dt
 from unittest.mock import patch
 
+import pytest
+
 from downloader.base import BaseDownloader
 from downloader.eonet import EONETDownloader
-from test.downloader.conftest import MockLogger
+from test.downloader.conftest import MockLogger, create_downloader
 
 SAMPLE_EVENTS = [
     {
@@ -67,14 +69,8 @@ SAMPLE_EVENTS = [
 ]
 
 
-def _create_downloader(logger=None):
-    if logger is None:
-        logger = MockLogger()
-    return EONETDownloader(logger=logger)
-
-
 def test_build_record():
-    downloader = _create_downloader()
+    downloader = create_downloader(EONETDownloader)
 
     record = downloader._build_record(SAMPLE_EVENTS[0])
 
@@ -97,7 +93,7 @@ def test_build_record():
 
 
 def test_build_record_closed_event():
-    downloader = _create_downloader()
+    downloader = create_downloader(EONETDownloader)
 
     record = downloader._build_record(SAMPLE_EVENTS[1])
 
@@ -110,7 +106,7 @@ def test_build_record_closed_event():
 
 
 def test_build_record_polygon_geometry():
-    downloader = _create_downloader()
+    downloader = create_downloader(EONETDownloader)
 
     record = downloader._build_record(SAMPLE_EVENTS[2])
 
@@ -124,7 +120,7 @@ def test_build_record_polygon_geometry():
 
 def test_download_by_date_range():
     logger = MockLogger()
-    downloader = _create_downloader(logger)
+    downloader = create_downloader(EONETDownloader, logger)
 
     with patch.object(BaseDownloader, "_get_json", return_value={"events": SAMPLE_EVENTS}):
         result = downloader.download_by_date_range(
@@ -140,25 +136,18 @@ def test_download_by_date_range():
     assert result[2]["category_name"] == "Floods"
 
 
-def test_download_by_date_range_empty():
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"events": []},
+        None,
+    ],
+)
+def test_download_by_date_range_empty_or_no_data(payload):
     logger = MockLogger()
-    downloader = _create_downloader(logger)
+    downloader = create_downloader(EONETDownloader, logger)
 
-    with patch.object(BaseDownloader, "_get_json", return_value={"events": []}):
-        result = downloader.download_by_date_range(
-            "https://ignored.com",
-            dt.datetime(2026, 9, 1),
-            dt.datetime(2026, 9, 2),
-        )
-
-    assert result == []
-
-
-def test_download_by_date_range_no_data():
-    logger = MockLogger()
-    downloader = _create_downloader(logger)
-
-    with patch.object(BaseDownloader, "_get_json", return_value=None):
+    with patch.object(BaseDownloader, "_get_json", return_value=payload):
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),
@@ -169,7 +158,7 @@ def test_download_by_date_range_no_data():
 
 
 def test_build_record_missing_geometry():
-    downloader = _create_downloader()
+    downloader = create_downloader(EONETDownloader)
     event = {
         "id": "EONET_99999",
         "title": "No Geometry Event",

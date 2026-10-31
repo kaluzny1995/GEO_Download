@@ -283,9 +283,9 @@ class USGSVolcanoDownloader(BaseDownloader):
                 object (no network, HTTP error, bad body).
         """
         try:
-            response = self.session.get(f"{NOTICE_API_URL}/{notice_identifier}", timeout=self.timeout)
-            response.raise_for_status()
-            data = response.json()
+            with self.session.get(f"{NOTICE_API_URL}/{notice_identifier}", timeout=self.timeout) as response:
+                response.raise_for_status()
+                data = response.json()
         except requests.RequestException as exc:
             raise RuntimeError(f"volcano notice request failed: {exc}") from exc
         except ValueError as exc:

@@ -5,10 +5,12 @@ import os
 import tempfile
 from unittest.mock import patch
 
+import pytest
+
 import run_openmeteo_thresholds as script
 from downloader.base import BaseDownloader
 from downloader.openmeteo_flood import OpenMeteoFloodDownloader
-from test.downloader.conftest import MockLogger
+from test.downloader.conftest import MockLogger, create_downloader
 
 SAMPLE_RIVERS = [
     {"name": "Danube", "country": "Romania", "latitude": 44.42, "longitude": 28.63},
@@ -45,13 +47,13 @@ SAMPLE_API_RESPONSE_EMPTY = {
 
 
 def _create_downloader(rivers=None, logger=None, thresholds_file=None):
-    if logger is None:
-        logger = MockLogger()
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(rivers or SAMPLE_RIVERS, f)
         temp_path = f.name
     try:
-        return OpenMeteoFloodDownloader(logger=logger, rivers_file=temp_path, thresholds_file=thresholds_file)
+        return create_downloader(
+            OpenMeteoFloodDownloader, logger, rivers_file=temp_path, thresholds_file=thresholds_file
+        )
     finally:
         os.unlink(temp_path)
 
@@ -253,35 +255,23 @@ def test_download_by_date_range():
     assert call_count == 3
 
 
-def test_download_by_date_range_all_null():
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "latitude": 0.0,
+            "longitude": 0.0,
+            "daily": {"time": ["2026-09-01"], "river_discharge": [None]},
+        },
+        None,
+    ],
+)
+def test_download_by_date_range_all_null_or_api_error(payload):
     # Arrange
     logger = MockLogger()
     downloader = _create_downloader(logger=logger)
 
-    null_response = {
-        "latitude": 0.0,
-        "longitude": 0.0,
-        "daily": {"time": ["2026-09-01"], "river_discharge": [None]},
-    }
-
-    with patch.object(BaseDownloader, "_get_json", return_value=null_response):
-        # Act
-        result = downloader.download_by_date_range(
-            "https://ignored.com",
-            dt.datetime(2026, 9, 1),
-            dt.datetime(2026, 9, 1),
-        )
-
-    # Assert
-    assert result == []
-
-
-def test_download_by_date_range_api_error():
-    # Arrange
-    logger = MockLogger()
-    downloader = _create_downloader(logger=logger)
-
-    with patch.object(BaseDownloader, "_get_json", return_value=None):
+    with patch.object(BaseDownloader, "_get_json", return_value=payload):
         # Act
         result = downloader.download_by_date_range(
             "https://ignored.com",

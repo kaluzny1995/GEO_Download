@@ -19,41 +19,36 @@ from reverse_geocode import (
 
 
 class TestCoordKey:
-    def test_rounds_to_four_decimals(self):
-        assert coord_key(45.45251, -104.46729) == "45.4525,-104.4673"
-
-    def test_accepts_the_strings_stored_in_the_cache(self):
-        assert coord_key("45.4525", "-104.4672") == "45.4525,-104.4672"
-
-    def test_points_inside_the_precision_share_a_key(self):
-        assert coord_key(1.0, 2.0) == coord_key(1.00001, 2.00001)
+    @pytest.mark.parametrize(
+        ("lat", "lon", "expected"),
+        [
+            (45.45251, -104.46729, "45.4525,-104.4673"),
+            ("45.4525", "-104.4672", "45.4525,-104.4672"),
+            (1.0, 2.0, "1.0000,2.0000"),
+        ],
+    )
+    def test_coord_key(self, lat, lon, expected):
+        assert coord_key(lat, lon) == expected
 
 
 class TestParseResponse:
-    def test_us_coordinates(self):
-        data = {"address": {"country_code": "us", "ISO3166-2-lvl4": "US-MT"}}
-        assert parse_response(data) == ("US", "MT")
-
-    def test_non_us_subdivision_keeps_its_suffix(self):
-        data = {"address": {"country_code": "mx", "ISO3166-2-lvl4": "MX-GRO"}}
-        assert parse_response(data) == ("MX", "GRO")
-
-    def test_state_level_wins_over_the_district(self):
-        data = {"address": {"country_code": "us", "ISO3166-2-lvl4": "US-TX", "ISO3166-2-lvl6": "US-48167"}}
-        assert parse_response(data) == ("US", "TX")
-
-    def test_falls_back_to_the_deeper_administrative_level(self):
-        data = {"address": {"country_code": "de", "ISO3166-2-lvl6": "DE-03115"}}
-        assert parse_response(data) == ("DE", "03115")
-
-    def test_open_water_has_no_country(self):
-        assert parse_response({"address": {}}) == ("", "")
-
-    def test_antarctica_answers_with_its_iso_country_code(self):
-        assert parse_response({"address": {"country_code": "aq"}}) == ("AQ", "")
-
-    def test_missing_fields(self):
-        assert parse_response({}) == ("", "")
+    @pytest.mark.parametrize(
+        ("data", "expected"),
+        [
+            ({"address": {"country_code": "us", "ISO3166-2-lvl4": "US-MT"}}, ("US", "MT")),
+            ({"address": {"country_code": "mx", "ISO3166-2-lvl4": "MX-GRO"}}, ("MX", "GRO")),
+            (
+                {"address": {"country_code": "us", "ISO3166-2-lvl4": "US-TX", "ISO3166-2-lvl6": "US-48167"}},
+                ("US", "TX"),
+            ),
+            ({"address": {"country_code": "de", "ISO3166-2-lvl6": "DE-03115"}}, ("DE", "03115")),
+            ({"address": {}}, ("", "")),
+            ({"address": {"country_code": "aq"}}, ("AQ", "")),
+            ({}, ("", "")),
+        ],
+    )
+    def test_parse_response(self, data, expected):
+        assert parse_response(data) == expected
 
 
 class TestReverseGeocode:

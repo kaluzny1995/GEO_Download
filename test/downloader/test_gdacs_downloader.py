@@ -1,9 +1,11 @@
 import datetime as dt
 from unittest.mock import patch
 
+import pytest
+
 from downloader.base import BaseDownloader
 from downloader.gdacs import GDACSDownloader
-from test.downloader.conftest import MockLogger
+from test.downloader.conftest import MockLogger, create_downloader
 
 SAMPLE_FEATURES = [
     {
@@ -51,14 +53,8 @@ SAMPLE_FEATURES = [
 ]
 
 
-def _create_downloader(logger=None):
-    if logger is None:
-        logger = MockLogger()
-    return GDACSDownloader(logger=logger)
-
-
 def test_build_record():
-    downloader = _create_downloader()
+    downloader = create_downloader(GDACSDownloader)
 
     record = downloader._build_record(SAMPLE_FEATURES[0])
 
@@ -78,7 +74,7 @@ def test_build_record():
 
 
 def test_build_record_missing_geometry():
-    downloader = _create_downloader()
+    downloader = create_downloader(GDACSDownloader)
     feature = {"type": "Feature", "geometry": None, "properties": {"eventtype": "EQ", "eventid": 1}}
 
     record = downloader._build_record(feature)
@@ -89,7 +85,7 @@ def test_build_record_missing_geometry():
 
 def test_download_by_date_range():
     logger = MockLogger()
-    downloader = _create_downloader(logger)
+    downloader = create_downloader(GDACSDownloader, logger)
 
     def mock_get_json(_url):
         return {"type": "FeatureCollection", "features": SAMPLE_FEATURES}
@@ -110,7 +106,7 @@ def test_download_by_date_range():
 
 def test_download_by_date_range_pagination():
     logger = MockLogger()
-    downloader = _create_downloader(logger)
+    downloader = create_downloader(GDACSDownloader, logger)
 
     page1_features = SAMPLE_FEATURES * 50
     page2_features = SAMPLE_FEATURES[:1]
@@ -135,25 +131,18 @@ def test_download_by_date_range_pagination():
     assert call_count == 2
 
 
-def test_download_by_date_range_empty():
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "FeatureCollection", "features": []},
+        None,
+    ],
+)
+def test_download_by_date_range_empty_or_no_data(payload):
     logger = MockLogger()
-    downloader = _create_downloader(logger)
+    downloader = create_downloader(GDACSDownloader, logger)
 
-    with patch.object(BaseDownloader, "_get_json", return_value={"type": "FeatureCollection", "features": []}):
-        result = downloader.download_by_date_range(
-            "https://ignored.com",
-            dt.datetime(2026, 9, 1),
-            dt.datetime(2026, 9, 2),
-        )
-
-    assert result == []
-
-
-def test_download_by_date_range_no_data():
-    logger = MockLogger()
-    downloader = _create_downloader(logger)
-
-    with patch.object(BaseDownloader, "_get_json", return_value=None):
+    with patch.object(BaseDownloader, "_get_json", return_value=payload):
         result = downloader.download_by_date_range(
             "https://ignored.com",
             dt.datetime(2026, 9, 1),

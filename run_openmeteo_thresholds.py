@@ -192,24 +192,27 @@ def make_fetcher(
         url = _baseline_url(api_url, river, start, end)
         for _ in range(max_hour_waits + 1):
             try:
-                response = session.get(url, timeout=downloader.timeout)
+                with session.get(url, timeout=downloader.timeout) as response:
+                    if response.status_code == 429:
+                        wait = _seconds_until_next_hour()
+                        logger.warning(f"Hourly API request limit reached — waiting {wait:.0f}s for the next hour")
+                        print(
+                            f"  Hourly API request limit reached — waiting {round(wait)}s for the next hour...",
+                            flush=True,
+                        )
+                        time.sleep(wait)
+                        continue
+                    time.sleep(sleep)
+                    try:
+                        response.raise_for_status()
+                        data = response.json()
+                    except (RequestException, ValueError) as error:
+                        logger.error(f"Failed to fetch {url}: {error}")
+                        return None
+                    return data if isinstance(data, dict) else None
             except RequestException as error:
                 logger.error(f"Failed to fetch {url}: {error}")
                 return None
-            if response.status_code == 429:
-                wait = _seconds_until_next_hour()
-                logger.warning(f"Hourly API request limit reached — waiting {wait:.0f}s for the next hour")
-                print(f"  Hourly API request limit reached — waiting {round(wait)}s for the next hour...", flush=True)
-                time.sleep(wait)
-                continue
-            time.sleep(sleep)
-            try:
-                response.raise_for_status()
-                data = response.json()
-            except (RequestException, ValueError) as error:
-                logger.error(f"Failed to fetch {url}: {error}")
-                return None
-            return data if isinstance(data, dict) else None
         logger.error(f"Hourly API request limit still in effect — giving up on {river['name']}")
         return None
 
