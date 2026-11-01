@@ -92,6 +92,32 @@ The script counts every source of `config.json`, writes the rows to [source_coun
 
 ## Usage
 
+### Docker
+
+GEO_Download does not run as a separate container: its runtime files are baked into
+the **`geo_airflow_spark`** image by the Compose stack in [GEO_E2E](../GEO_E2E) and
+invoked by the Airflow `DOWNLOAD` tasks inside the scheduler container.
+
+- The `geo_download_311` conda environment lives at `/opt/conda/envs/geo_download_311`.
+- The project is copied to `/opt/geo/GEO_Download` (runtime files only — no docs,
+  tests, tox/mypy/lint setup).
+- `data/` is backed by the shared `geo_data` named volume and seeded from the image on
+  first use, so downloaded CSV files are visible to Spark executors and survive rebuilds.
+- Set the Supabase credentials in `GEO_E2E/.env` before starting the stack; Airflow
+  defaults to `airflow_admin` / `airflow_admin`.
+
+```bash
+cd ../GEO_E2E
+docker compose up -d --build
+```
+
+After changing GEO_Download, rebuild the image:
+
+```bash
+docker compose build airflow-init
+docker compose up -d
+```
+
 ### Setup
 
 ```bash
