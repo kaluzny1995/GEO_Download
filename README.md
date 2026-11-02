@@ -101,8 +101,9 @@ invoked by the Airflow `DOWNLOAD` tasks inside the scheduler container.
 - The `geo_download_311` conda environment lives at `/opt/conda/envs/geo_download_311`.
 - The project is copied to `/opt/geo/GEO_Download` (runtime files only — no docs,
   tests, tox/mypy/lint setup).
-- `data/` is backed by the shared `geo_data` named volume and seeded from the image on
-  first use, so downloaded CSV files are visible to Spark executors and survive rebuilds.
+- `data/` is the host folder bind-mounted at `/opt/geo/GEO_Download/data` (`GEO_DATA_DIR`
+  in `GEO_E2E/.env`), so downloaded CSV files are immediately visible in the local repo and
+  to Spark executors. The old `geo_data` named volume is no longer used and is left untouched.
 - Set the Supabase credentials in `GEO_E2E/.env` before starting the stack; Airflow
   defaults to `airflow_admin` / `airflow_admin`.
 
