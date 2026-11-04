@@ -103,7 +103,9 @@ invoked by the Airflow `DOWNLOAD` tasks inside the scheduler container.
   tests, tox/mypy/lint setup).
 - `data/` is the host folder bind-mounted at `/opt/geo/GEO_Download/data` (`GEO_DATA_DIR`
   in `GEO_E2E/.env`), so downloaded CSV files are immediately visible in the local repo and
-  to Spark executors. The old `geo_data` named volume is no longer used and is left untouched.
+  to Spark executors. GEO_ETL's PySpark DATA_SOURCE_FILE job publishes the CSV inventory from the
+  Spark side to `geo.data_source_files`, which GEO_API serves through `GET /data-source-files`.
+  The old `geo_data` named volume is no longer used and is left untouched.
 - Set the Supabase credentials in `GEO_E2E/.env` before starting the stack; Airflow
   defaults to `airflow_admin` / `airflow_admin`.
 
@@ -270,5 +272,5 @@ GEO_Download is the first stage of the GIS data pipeline. The five projects sit 
 
 - **[GEO_ETL](../GEO_ETL)** — PySpark ETL that loads the CSVs written here into Supabase; its `data.directory` is `../GEO_Download/data`.
 - **[GEO_E2E](../GEO_E2E)** — Airflow orchestrator that schedules `run_download.py`; also hosts the `docker-compose.yaml` running the Spark cluster GEO_ETL connects to.
-- **[GEO_API](../GEO_API)** — FastAPI layer serving the finished Supabase data (`geo.data_quality`, `geo.union_etl`) over REST.
-- **[GEO_APP](../GEO_APP)** — React dashboard rendering what GEO_API returns.
+- **[GEO_API](../GEO_API)** — FastAPI layer serving the finished Supabase data (`geo.data_quality`, `geo.union_etl`, `geo.data_source_files`) over REST, including the `GET /data-source-files` CSV inventory.
+- **[GEO_APP](../GEO_APP)** — React dashboard rendering what GEO_API returns, including the Data Source Files view.
