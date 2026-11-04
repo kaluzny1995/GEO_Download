@@ -188,7 +188,8 @@ Conventions shared by every source:
 ## IBTrACS (Global Tropical Cyclones)
 
 - **File:** `data/IBTrACS/ibtracs_cyclones_YYYY-MM-DD.csv` · **176 columns**
-- **Grain:** one row per cyclone position (best-track point) · **Provenance:** NOAA IBTrACS v04r01 (`last3years` by default), streamed row-by-row; the upstream *units* row (row 2) is discarded and only rows whose `ISO_TIME` falls inside the requested day are kept.
+- **Grain:** one row per cyclone position (best-track point) · **Provenance:** NOAA IBTrACS v04r01 (`last3years` by default). The upstream CSV is streamed once per run to a temporary file (never loaded into memory) and every day of a multi-day range is filtered from that copy; the upstream *units* row (row 2) is discarded and only rows whose `ISO_TIME` falls inside the requested day are kept.
+- **Transfer resilience:** each download attempt has a wall-clock budget (`download_timeout`, 300 s by default) and logs progress every 2 MiB; a stalled or truncated stream is retried from scratch up to three times. This keeps a slow NCEI response from consuming the whole Airflow task timeout.
 - `ISO_TIME` is looked up **by header name**, never by a fixed column index — the live header starts `SID,SEASON,NUMBER,BASIN,SUBBASIN,NAME,ISO_TIME,…`, so any positional assumption silently filters out every row.
 - The upstream `last3years` file trails the present by 1–2 days, so the most recent days can legitimately yield no rows (and therefore no file); the next incremental run retries them.
 - Missing values are blank cells (IBTrACS's own convention).

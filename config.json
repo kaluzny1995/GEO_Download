@@ -84,7 +84,8 @@
       "output_file_pattern": "ibtracs_cyclones_{date}.csv",
       "is_date_to_previous_day": true,
       "params": {
-        "dataset": "last3years"
+        "dataset": "last3years",
+        "download_timeout": 300
       }
     },
     "USGS_Volcano": {

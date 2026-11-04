@@ -20,7 +20,7 @@ Tests cover:
 - **EONET downloader** — event parsing (Point/Polygon geometry), closed events, missing geometry, empty/no-data handling.
 - **Open-Meteo Flood downloader** — river discharge queries, null value handling, multi-river aggregation.
 - **USGS NWIS downloader** — WaterServices instantaneous-values parsing (day mean of the discharge, day peak of the gauge height, non-numeric readings skipped, one row per configured parameter), NWS flood-category reference maintenance (`data/usgs_flood_categories.csv`, one gauge request, existing gauges untouched, unknown gauges logged) and the `no_flooding` … `major` classification of a day's peak stage.
-- **IBTrACS downloader** — CSV parsing with units row skip, `ISO_TIME` column resolution by header name (regression: a fixed column index dropped every record), date filtering, custom dataset selection, error handling.
+- **IBTrACS downloader** — CSV parsing with units row skip, `ISO_TIME` column resolution by header name (regression: a fixed column index dropped every record), date filtering, custom dataset selection, error handling, one-download-per-run reuse (a multi-day range fetches the upstream CSV once), bounded transfer attempts with retry after a broken/stalled stream and progress logging every 2 MiB.
 - **USGS Volcano downloader** — HANS API response parsing, alert filtering, notice URL construction, notice-detail lookup maintenance (`data/usgs_volcano_notices.csv`, one fetch per new notice) and stamping of `notice_type_name`, `latitude`, `longitude`, `region`, `synopsis`; plus the NCEI eruption enrichment (`data/usgs_volcano_ncei_eruptions.csv`, built once from the NCEI HazEL endpoint) stamped as `vei` (max over the volcano's significant eruptions), `casualties` (total deaths) and `damage` (total damage, million USD).
 - **NIFC downloader** — ArcGIS FeatureServer query, `outFields`/centroid handling, ArcGIS error-payload detection, date/time filtering, unit-name lookup maintenance (`data/nifc_unit_names.csv`, refresh when the data carries an unknown code) and `unit_name` stamping with raw-code fallback.
 - **Reverse geocoding** — `reverse_geocode.py` (coordinate keying, Nominatim response parsing, lookup round-trip, strict fetch-then-persist) and `stamp_geocode()` across the eight geocoding downloaders: appended column placement, per-source fetch filters (blank `state`, unknown `place` suffix, `DIST2LAND ≤ 100` with cached far-row answers), failed-fetch propagation, and test isolation — a missing point in a test must never reach the real API or extend the repository's lookup.
@@ -75,7 +75,7 @@ Current state: `ruff check .` → **0 findings**. `ruff format --check .` → **
 |---------|-----------|--------|
 | `tox` | default gate = `lint` + `py311` | ✅ |
 | `tox -e lint` | `ruff check --output-format=concise .` | ✅ |
-| `tox -e py311` | full pytest suite (319 tests) | ✅ |
+| `tox -e py311` | full pytest suite (325 tests) | ✅ |
 | `tox -e typecheck` | `mypy model downloader downloader_factory.py util.py run_download.py run_openmeteo_thresholds.py run_source_counts.py reverse_geocode.py` | ✅ |
 | `tox -e warnings` | `pytest -W error::DeprecationWarning` | ✅ |
 | `tox -e format` | `ruff format --check .` | ✅ 0 files |

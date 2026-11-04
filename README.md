@@ -40,16 +40,16 @@ The script counts every source of `config.json`, writes the rows to [source_coun
 <!-- source_counts:start -->
 | Source | Files | Records |
 |--------|------:|--------:|
-| USGS_Earthquake | 33 | 9,783 |
-| GDACS | 33 | 9,720 |
-| EONET | 32 | 177 |
-| OpenMeteo_Flood | 33 | 7,326 |
-| USGS_NWIS | 33 | 54 |
-| Avalanche_ORG | 33 | 5,494 |
-| IBTrACS | 31 | 948 |
-| USGS_Volcano | 20 | 56 |
-| NIFC | 32 | 247 |
-| **Total** | **280** | **33,805** |
+| USGS_Earthquake | 64 | 18,279 |
+| GDACS | 64 | 17,442 |
+| EONET | 63 | 324 |
+| OpenMeteo_Flood | 64 | 14,208 |
+| USGS_NWIS | 64 | 115 |
+| Avalanche_ORG | 64 | 10,766 |
+| IBTrACS | 64 | 1,766 |
+| USGS_Volcano | 38 | 101 |
+| NIFC | 62 | 396 |
+| **Total** | **547** | **63,397** |
 <!-- source_counts:end -->
 
 ## Features

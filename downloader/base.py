@@ -13,6 +13,10 @@ from urllib3.util.retry import Retry
 from reverse_geocode import DEFAULT_REVERSE_GEOCODE_FILE
 from util import setup_logger
 
+# Identify the client explicitly instead of the default `python-requests/x.y` agent:
+# some upstreams (NOAA/NCEI included) throttle or stall unattributed scripted clients.
+USER_AGENT = "GEO_Download/1.0"
+
 
 class BaseDownloader(abc.ABC):
     """Abstract base class for all data source downloaders."""
@@ -48,6 +52,7 @@ class BaseDownloader(abc.ABC):
     def _create_session() -> requests.Session:
         """Create a requests session with retry logic."""
         session = requests.Session()
+        session.headers.update({"User-Agent": USER_AGENT})
         retries = Retry(
             total=5,
             backoff_factor=2,

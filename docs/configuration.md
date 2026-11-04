@@ -91,7 +91,8 @@ The application is configured via `config.json`. Each data source is defined und
       "output_file_pattern": "ibtracs_cyclones_{date}.csv",
       "is_date_to_previous_day": true,
       "params": {
-        "dataset": "last3years"
+        "dataset": "last3years",
+        "download_timeout": 300
       }
     },
     "USGS_Volcano": {
@@ -159,6 +160,7 @@ Unknown keys raise `TypeError` when the downloader is constructed (the chain abo
 | `USGS_NWIS` | `nwps_api_url` | `str` — `https://api.water.noaa.gov/nwps/v1/gauges` | NWS gauge endpoint the flood-category thresholds are read from, one request per gauge. |
 | `USGS_NWIS` | `flood_categories_file` | `str` — `data/usgs_flood_categories.csv` | NWS flood-stage reference GEO_ETL joins; the download adds a gauge missing from it and leaves a covered gauge alone. |
 | `IBTrACS` | `dataset` | `str` — `last3years` | IBTrACS dataset slice to download. |
+| `IBTrACS` | `download_timeout` | `int` — `300` | Wall-clock budget in seconds for one full-file transfer attempt. A stalled/slow stream is aborted at this limit and retried (three bounded attempts); progress is logged every 2 MiB. |
 | `Avalanche_ORG` | `notices_file` | `str` — `data/avalanche_org_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
 | `USGS_Volcano` | `notices_file` | `str` — `data/usgs_volcano_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
 | `USGS_Volcano` | `ncei_eruptions_file` | `str` — `data/usgs_volcano_ncei_eruptions.csv` | NCEI Significant Volcanic Eruptions reference stamped into `vei`, `casualties` and `damage`; the download builds it when missing. |

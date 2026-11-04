@@ -25,6 +25,13 @@ def test_create_session_has_retry():
     assert "http://" in session.adapters
 
 
+def test_create_session_identifies_the_client():
+    """The session sends a descriptive User-Agent instead of the default python-requests one."""
+    session = BaseDownloader._create_session()
+
+    assert session.headers["User-Agent"] == "GEO_Download/1.0"
+
+
 def test_get_json_success():
     logger = MockLogger()
     downloader = USGSEarthquakeDownloader(logger=logger)
