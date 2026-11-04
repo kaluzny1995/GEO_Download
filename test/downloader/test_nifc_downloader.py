@@ -223,9 +223,10 @@ def test_download_by_date_range_connection_error():
     assert any("Failed to fetch" in msg for _, msg in logger.messages)
 
 
-def test_download_by_date_range_builds_correct_query():
+@pytest.mark.parametrize("result_record_count", [2000, 500], ids=["default", "configured"])
+def test_download_by_date_range_builds_correct_query(result_record_count):
     logger = MockLogger()
-    downloader = NIFCDownloader(logger=logger)
+    downloader = NIFCDownloader(logger=logger, result_record_count=result_record_count)
 
     mock_response = MagicMock()
     mock_response.json.return_value = {"features": []}
@@ -243,8 +244,28 @@ def test_download_by_date_range_builds_correct_query():
     assert "returnGeometry=false" in called_url
     assert "returnCentroid=true" in called_url
     assert "outSR=4326" in called_url
+    assert f"resultRecordCount={result_record_count}" in called_url
     assert "poly_GISAcres" in called_url
     assert "poly_GIS%20Acres" not in called_url
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "attribute", "expected"),
+    [
+        ({"jurisdiction_api_url": "https://example.test/query"}, "jurisdiction_api_url", "https://example.test/query"),
+        ({"result_record_count": 500}, "_result_record_count", 500),
+    ],
+    ids=["jurisdiction-api-url", "result-record-count"],
+)
+def test_operational_knobs_are_configurable(kwargs, attribute, expected):
+    downloader = NIFCDownloader(logger=MockLogger(), **kwargs)
+
+    assert getattr(downloader, attribute) == expected
+
+
+def test_non_positive_result_record_count_is_rejected():
+    with pytest.raises(ValueError, match="result_record_count must be positive"):
+        NIFCDownloader(logger=MockLogger(), result_record_count=0)
 
 
 def test_build_record_keeps_unit_name_next_to_the_code():
@@ -304,6 +325,19 @@ class TestFetchPairs:
         url = mock_get_json.call_args.args[0]
         assert "returnDistinctValues=true" in url
         assert "JurisdictionalUnitID_sansUS+IS+NOT+NULL" in url
+
+    @patch("downloader.base.BaseDownloader._get_json")
+    def test_uses_the_configured_endpoint_when_no_url_is_given(self, mock_get_json, tmp_path):
+        mock_get_json.return_value = _pairs_payload()
+        downloader = NIFCDownloader(
+            logger=MockLogger(),
+            unit_names_file=str(tmp_path / "nifc_unit_names.csv"),
+            jurisdiction_api_url="https://example.test/configured",
+        )
+
+        downloader._fetch_pairs()
+
+        assert mock_get_json.call_args.args[0].startswith("https://example.test/configured?")
 
     @patch("downloader.base.BaseDownloader._get_json")
     def test_skips_blank_codes_and_names(self, mock_get_json, tmp_path):

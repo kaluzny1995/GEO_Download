@@ -11,10 +11,11 @@ from typing import ClassVar
 from downloader.base import BaseDownloader
 from reverse_geocode import stamp_geocode
 
-JURISDICTION_API_URL = (
+DEFAULT_JURISDICTION_API_URL = (
     "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/"
     "DMP_JurisdictionalUnits_Public/FeatureServer/0/query"
 )
+DEFAULT_RESULT_RECORD_COUNT = 2000
 JURISDICTION_WHERE = "JurisdictionalUnitID_sansUS IS NOT NULL AND JurisdictionalUnitID_sansUS <> ''"
 JURISDICTION_CODE_FIELD = "JurisdictionalUnitID_sansUS"
 JURISDICTION_NAME_FIELD = "JurisdictionalUnitName"
@@ -101,11 +102,17 @@ class NIFCDownloader(BaseDownloader):
         log_folder: str | None = None,
         unit_names_file: str | None = None,
         reverse_geocode_file: str | None = None,
+        jurisdiction_api_url: str = DEFAULT_JURISDICTION_API_URL,
+        result_record_count: int = DEFAULT_RESULT_RECORD_COUNT,
     ):
         super().__init__(
             timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
         )
+        if result_record_count <= 0:
+            raise ValueError("result_record_count must be positive")
         self.unit_names_file = unit_names_file or self.DEFAULT_UNIT_NAMES_FILE
+        self.jurisdiction_api_url = jurisdiction_api_url
+        self._result_record_count = result_record_count
 
     @staticmethod
     def _build_record(feature: dict) -> dict:
@@ -184,11 +191,12 @@ class NIFCDownloader(BaseDownloader):
             writer.writerows({"unit_code": code, "unit_name": names[code]} for code in sorted(names))
         self.logger.info(f"  unit-name lookup: {len(names)} codes -> {self.unit_names_file}")
 
-    def _fetch_pairs(self, api_url: str = JURISDICTION_API_URL) -> set[tuple[str, str]]:
+    def _fetch_pairs(self, api_url: str | None = None) -> set[tuple[str, str]]:
         """Download every distinct ``(code, name)`` pair of the jurisdiction layer.
 
         Args:
-            api_url: ArcGIS ``FeatureServer/0/query`` endpoint.
+            api_url: ArcGIS ``FeatureServer/0/query`` endpoint; defaults to
+                ``jurisdiction_api_url`` from the source params.
 
         Returns:
             The distinct non-empty code/name pairs.
@@ -196,6 +204,7 @@ class NIFCDownloader(BaseDownloader):
         Raises:
             RuntimeError: When the endpoint errors out or returns no usable rows.
         """
+        api_url = api_url or self.jurisdiction_api_url
         params = {
             "where": JURISDICTION_WHERE,
             "outFields": f"{JURISDICTION_CODE_FIELD},{JURISDICTION_NAME_FIELD}",
@@ -284,7 +293,7 @@ class NIFCDownloader(BaseDownloader):
             "returnCentroid": "true",
             "outSR": "4326",
             "f": "json",
-            "resultRecordCount": 2000,
+            "resultRecordCount": self._result_record_count,
         }
 
         query_string = "&".join(f"{k}={v}" for k, v in params.items())

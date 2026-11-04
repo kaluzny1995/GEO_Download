@@ -47,9 +47,57 @@ def test_build_url(downloader_kwargs, expected_dataset_file):
     assert "ncei.noaa.gov" in url
 
 
-def test_download_timeout_must_be_positive():
-    with pytest.raises(ValueError, match="download_timeout must be positive"):
-        IBTrACSDownloader(logger=MockLogger(), download_timeout=0)
+@pytest.mark.parametrize(
+    ("kwargs", "attribute", "expected"),
+    [
+        ({"geocode_distance_km": 50}, "_geocode_distance_km", 50),
+        ({"download_timeout": 120}, "_download_timeout", 120),
+        ({"download_chunk_size": 65536}, "_download_chunk_size", 65536),
+        ({"download_attempts": 5}, "_download_attempts", 5),
+        ({"download_retry_backoff_seconds": 1.5}, "_retry_backoff_seconds", 1.5),
+        ({"progress_log_bytes": 4096}, "_progress_log_bytes", 4096),
+    ],
+    ids=[
+        "geocode-distance",
+        "download-timeout",
+        "download-chunk-size",
+        "download-attempts",
+        "retry-backoff",
+        "progress-log-bytes",
+    ],
+)
+def test_operational_knobs_are_taken_from_config(kwargs, attribute, expected):
+    """Every tunable IBTrACS knob is a constructor argument populated from config.json params."""
+    downloader = IBTrACSDownloader(logger=MockLogger(), **kwargs)
+
+    assert getattr(downloader, attribute) == expected
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"geocode_distance_km": 0},
+        {"download_timeout": 0},
+        {"download_chunk_size": 0},
+        {"download_attempts": 0},
+        {"download_retry_backoff_seconds": 0},
+        {"progress_log_bytes": 0},
+    ],
+    ids=[
+        "geocode-distance",
+        "download-timeout",
+        "download-chunk-size",
+        "download-attempts",
+        "retry-backoff",
+        "progress-log-bytes",
+    ],
+)
+def test_non_positive_operational_knobs_are_rejected(kwargs):
+    """A zero/negative tunable fails at construction instead of disabling the safeguard."""
+    name = next(iter(kwargs))
+
+    with pytest.raises(ValueError, match=f"{name} must be positive"):
+        IBTrACSDownloader(logger=MockLogger(), **kwargs)
 
 
 @pytest.mark.parametrize(
@@ -78,77 +126,62 @@ def test_download_by_date_range(start_date, end_date, expected_times):
     assert mock_get.call_args.kwargs["stream"] is True
 
 
-def test_download_by_date_range_skips_units_row():
-    """The units row (row 2) must never appear in the output."""
+@pytest.mark.parametrize(
+    ("csv_text", "end_date", "expected_times", "expected_sid"),
+    [
+        (
+            SAMPLE_CSV,
+            dt.datetime(2026, 9, 3),
+            ["2026-09-01 06:00:00", "2026-09-01 12:00:00", "2026-09-02 06:00:00", "2026-09-01 18:00:00"],
+            None,
+        ),
+        (
+            "SID,ISO_TIME,BASIN,SEASON,NAME\n"
+            " , , ,Year, \n"
+            "2026001NA01,2026-09-01 06:00:00,NA,2026,GAMMA\n"
+            "2026001NA01,2026-09-05 06:00:00,NA,2026,GAMMA\n",
+            dt.datetime(2026, 9, 2),
+            ["2026-09-01 06:00:00"],
+            "2026001NA01",
+        ),
+    ],
+    ids=["units-row-skipped", "iso-time-resolved-by-name"],
+)
+def test_download_parses_csv_by_header(csv_text, end_date, expected_times, expected_sid):
+    """The units row is skipped and ISO_TIME is located by header name, not by position."""
     logger = MockLogger()
     downloader = IBTrACSDownloader(logger=logger)
-
-    start_date = dt.datetime(2026, 9, 1)
-    end_date = dt.datetime(2026, 9, 3)
-
-    with patch.object(downloader.session, "get", return_value=_mock_csv_response()):
-        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
-
-    assert len(result) == 4
-    for record in result:
-        assert record.get("SEASON") != "Year"
-        assert record.get("ISO_TIME") != ""
-
-
-def test_download_by_date_range_resolves_iso_time_by_name():
-    """ISO_TIME must be located by header name, not by a fixed column index."""
-    logger = MockLogger()
-    downloader = IBTrACSDownloader(logger=logger)
-
-    # ISO_TIME deliberately not in the position used by the live IBTrACS file.
-    csv_text = (
-        "SID,ISO_TIME,BASIN,SEASON,NAME\n"
-        " , , ,Year, \n"
-        "2026001NA01,2026-09-01 06:00:00,NA,2026,GAMMA\n"
-        "2026001NA01,2026-09-05 06:00:00,NA,2026,GAMMA\n"
-    )
-
-    start_date = dt.datetime(2026, 9, 1)
-    end_date = dt.datetime(2026, 9, 2)
 
     with patch.object(downloader.session, "get", return_value=_mock_csv_response(csv_text)):
-        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
+        result = downloader.download_by_date_range("https://example.com/api", dt.datetime(2026, 9, 1), end_date)
 
-    assert len(result) == 1
-    assert result[0]["ISO_TIME"] == "2026-09-01 06:00:00"
-    assert result[0]["SID"] == "2026001NA01"
+    assert [record["ISO_TIME"] for record in result] == expected_times
+    assert all(record["SEASON"] != "Year" for record in result)
+    if expected_sid is not None:
+        assert result[0]["SID"] == expected_sid
 
 
-def test_download_by_date_range_missing_iso_time_column():
-    """A header without ISO_TIME must fail loudly instead of returning nothing silently."""
+@pytest.mark.parametrize(
+    ("csv_text", "expected_log"),
+    [
+        ("SID,SEASON,BASIN\n ,Year,NA\n", "has no ISO_TIME column"),
+        ("SID,SEASON,ISO_TIME\n ,Year, \n", None),
+    ],
+    ids=["missing-iso-time", "empty"],
+)
+def test_download_by_date_range_unusable_csv(csv_text, expected_log):
+    """A header without ISO_TIME fails loudly; an otherwise empty CSV returns no records."""
     logger = MockLogger()
     downloader = IBTrACSDownloader(logger=logger)
 
-    mock_response = _mock_csv_response("SID,SEASON,BASIN\n ,Year,NA\n")
-
-    start_date = dt.datetime(2026, 9, 1)
-    end_date = dt.datetime(2026, 9, 2)
-
-    with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
+    with patch.object(downloader.session, "get", return_value=_mock_csv_response(csv_text)):
+        result = downloader.download_by_date_range(
+            "https://example.com/api", dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2)
+        )
 
     assert result == []
-    assert any("has no ISO_TIME column" in msg for _, msg in logger.messages)
-
-
-def test_download_by_date_range_empty_csv():
-    logger = MockLogger()
-    downloader = IBTrACSDownloader(logger=logger)
-
-    mock_response = _mock_csv_response("SID,SEASON,ISO_TIME\n ,Year, \n")
-
-    start_date = dt.datetime(2026, 9, 1)
-    end_date = dt.datetime(2026, 9, 2)
-
-    with patch.object(downloader.session, "get", return_value=mock_response):
-        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
-
-    assert result == []
+    if expected_log is not None:
+        assert any(expected_log in msg for _, msg in logger.messages)
 
 
 def test_download_by_date_range_custom_dataset():
@@ -185,93 +218,101 @@ def test_download_reuses_the_dataset_for_later_days():
     assert any("already downloaded in this run" in msg for _, msg in logger.messages)
 
 
-@pytest.mark.parametrize("error_mode", ["http-error", "connection-error"])
-def test_download_by_date_range_fetch_errors(error_mode, monkeypatch):
-    """A failing upstream is retried a bounded number of times, then yields no records."""
+@pytest.mark.parametrize(
+    ("failure_mode", "expected_calls", "expected_rows"),
+    [
+        ("http-error", 3, 0),
+        ("connection-error", 3, 0),
+        ("stalled-stream", 2, 3),
+    ],
+    ids=["http-error", "connection-error", "stalled-stream"],
+)
+def test_download_retries_transient_failures(failure_mode, expected_calls, expected_rows, monkeypatch):
+    """HTTP/network errors exhaust the bounded retries; a stalled stream can recover on retry."""
     monkeypatch.setattr("downloader.ibtracs.time.sleep", lambda _seconds: None)
     logger = MockLogger()
     downloader = IBTrACSDownloader(logger=logger)
 
-    start_date = dt.datetime(2026, 9, 1)
-    end_date = dt.datetime(2026, 9, 2)
-
-    if error_mode == "http-error":
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
-        get_patcher = patch.object(downloader.session, "get", return_value=mock_response)
-    else:
+    if failure_mode == "http-error":
+        response = MagicMock()
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
+        get_patcher = patch.object(downloader.session, "get", return_value=response)
+    elif failure_mode == "connection-error":
         get_patcher = patch.object(
             downloader.session, "get", side_effect=requests.exceptions.ConnectionError("Connection refused")
         )
+    else:
+        stalled = MagicMock()
+        stalled.raise_for_status = MagicMock()
+        stalled.close = MagicMock()
+
+        def broken_chunks(*_args, **_kwargs):
+            yield b"SID,SEASON,ISO_TIME\n"
+            raise requests.exceptions.ChunkedEncodingError("connection broken")
+
+        stalled.iter_content.side_effect = broken_chunks
+        get_patcher = patch.object(downloader.session, "get", side_effect=[stalled, _mock_csv_response()])
 
     with get_patcher as mock_get:
-        result = downloader.download_by_date_range("https://example.com/api", start_date, end_date)
-
-    assert result == []
-    assert mock_get.call_count == 3
-    assert any("Failed to fetch" in msg for _, msg in logger.messages)
-    assert any("attempt 1/3 failed" in msg for level, msg in logger.messages if level == "WARNING")
-
-
-def test_download_retries_a_stalled_stream(monkeypatch):
-    """A stream that breaks mid-transfer is retried from scratch and can still succeed."""
-    monkeypatch.setattr("downloader.ibtracs.time.sleep", lambda _seconds: None)
-    logger = MockLogger()
-    downloader = IBTrACSDownloader(logger=logger)
-
-    stalled = MagicMock()
-    stalled.raise_for_status = MagicMock()
-    stalled.close = MagicMock()
-
-    def broken_chunks(*_args, **_kwargs):
-        yield b"SID,SEASON,ISO_TIME\n"
-        raise requests.exceptions.ChunkedEncodingError("connection broken")
-
-    stalled.iter_content.side_effect = broken_chunks
-
-    with patch.object(downloader.session, "get", side_effect=[stalled, _mock_csv_response()]) as mock_get:
         result = downloader.download_by_date_range(
             "https://example.com/api", dt.datetime(2026, 9, 1), dt.datetime(2026, 9, 2)
         )
 
-    assert mock_get.call_count == 2
-    assert len(result) == 3
+    assert mock_get.call_count == expected_calls
+    assert len(result) == expected_rows
     assert any("attempt 1/3 failed" in msg for level, msg in logger.messages if level == "WARNING")
+    if expected_rows == 0:
+        assert any("Failed to fetch" in msg for _, msg in logger.messages)
 
 
-def test_download_attempt_has_a_wall_clock_budget(tmp_path, monkeypatch):
-    """A trickling stream is aborted when the per-attempt download budget is exhausted."""
+@pytest.mark.parametrize(
+    "interrupt",
+    [
+        "trickling-stream",
+        pytest.param(
+            "blocking-request",
+            marks=pytest.mark.skipif(
+                not hasattr(signal, "SIGALRM"), reason="SIGALRM is required for the total-attempt deadline"
+            ),
+        ),
+    ],
+    ids=["trickling-stream", "blocking-request"],
+)
+def test_download_attempt_has_a_wall_clock_budget(interrupt, tmp_path, monkeypatch):
+    """Both a trickling stream and a pre-first-chunk block are cut off by the attempt deadline."""
     downloader = IBTrACSDownloader(logger=MockLogger(), download_timeout=1)
 
-    # started = 0.0, then the first chunk check sees 2.0 > 1 -> the attempt is over budget
-    ticks = iter([0.0, 2.0])
-    monkeypatch.setattr("downloader.ibtracs.time.monotonic", lambda: next(ticks))
+    if interrupt == "trickling-stream":
+        # started = 0.0, then the first chunk check sees 2.0 > 1 -> the attempt is over budget
+        ticks = iter([0.0, 2.0])
+        monkeypatch.setattr("downloader.ibtracs.time.monotonic", lambda: next(ticks))
 
-    with (
-        patch.object(downloader.session, "get", return_value=_mock_csv_response()),
-        pytest.raises(requests.exceptions.Timeout, match="download budget"),
-    ):
-        downloader._download_to("https://example.com/api", str(tmp_path / "ibtracs.csv"))
+        with (
+            patch.object(downloader.session, "get", return_value=_mock_csv_response()),
+            pytest.raises(requests.exceptions.Timeout, match="download budget"),
+        ):
+            downloader._download_to("https://example.com/api", str(tmp_path / "ibtracs.csv"))
+    else:
+        monkeypatch.setattr(downloader, "_download_to", lambda *_args: time.sleep(2))
 
-
-@pytest.mark.skipif(not hasattr(signal, "SIGALRM"), reason="SIGALRM is required for the total-attempt deadline")
-def test_download_attempt_interrupts_a_blocking_request(tmp_path, monkeypatch):
-    """A request that blocks before the first chunk is interrupted by the attempt deadline."""
-    downloader = IBTrACSDownloader(logger=MockLogger(), download_timeout=1)
-    monkeypatch.setattr(downloader, "_download_to", lambda *_args: time.sleep(2))
-
-    with pytest.raises(requests.exceptions.Timeout, match="download budget"):
-        downloader._download_attempt("https://example.com/api", str(tmp_path / "ibtracs.csv"))
+        with pytest.raises(requests.exceptions.Timeout, match="download budget"):
+            downloader._download_attempt("https://example.com/api", str(tmp_path / "ibtracs.csv"))
 
 
-def test_download_stamps_geocode_pair_with_near_land_filter(tmp_path):
+@pytest.mark.parametrize(
+    ("geocode_distance_km", "expected_at_100_km"),
+    [(100, "MT"), (50, "")],
+    ids=["includes-100km", "excludes-100km"],
+)
+def test_download_stamps_geocode_pair_with_near_land_filter(tmp_path, geocode_distance_km, expected_at_100_km):
     """Near-land rows are geocoded; far rows get the cached answer or an empty stamp."""
     from reverse_geocode import coord_key, save_cache
 
     lookup = tmp_path / "reverse_geocode.csv"
     save_cache({coord_key(15.0, 135.0): ("PH", "PSA")}, str(lookup))
-    downloader = IBTrACSDownloader(logger=MockLogger(), reverse_geocode_file=str(lookup))
+    downloader = IBTrACSDownloader(
+        logger=MockLogger(), reverse_geocode_file=str(lookup), geocode_distance_km=geocode_distance_km
+    )
 
     with patch.object(downloader.session, "get", return_value=_mock_csv_response()):
         result = downloader.download_by_date_range(
@@ -279,7 +320,7 @@ def test_download_stamps_geocode_pair_with_near_land_filter(tmp_path):
         )
 
     by_key = {(record["LAT"], record["LON"]): record for record in result}
-    assert by_key[("26.0", "-81.0")]["geocode_state"] == "MT"  # DIST2LAND 100 → fetched
+    assert by_key[("26.0", "-81.0")]["geocode_state"] == expected_at_100_km  # DIST2LAND 100
     assert by_key[("27.0", "-82.0")]["geocode_country"] == "US"  # DIST2LAND 50 → fetched
     assert by_key[("15.0", "135.0")]["geocode_state"] == "PSA"  # far, but cached
     assert by_key[("25.0", "-80.0")]["geocode_country"] == ""  # DIST2LAND 150, not cached

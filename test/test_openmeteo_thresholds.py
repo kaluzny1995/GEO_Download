@@ -365,3 +365,22 @@ class TestParseArgs:
         assert args.baseline_start == script.DEFAULT_BASELINE_START
         assert args.min_days == script.DEFAULT_MIN_DAYS
         assert args.sleep == script.DEFAULT_SLEEP
+        assert args.max_hour_waits == 6
+
+    @pytest.mark.parametrize(
+        ("params", "attribute", "expected"),
+        [
+            ({"threshold_baseline_start": "2020-01-01"}, "baseline_start", "2020-01-01"),
+            ({"threshold_min_days": 365}, "min_days", 365),
+            ({"threshold_sleep_seconds": 0.25}, "sleep", 0.25),
+            ({"threshold_max_hour_waits": 2}, "max_hour_waits", 2),
+            ({"threshold_progress_every_rivers": 5}, "progress_every_rivers", 5),
+        ],
+        ids=["baseline-start", "min-days", "sleep", "max-hour-waits", "progress-every-rivers"],
+    )
+    def test_threshold_knobs_come_from_the_source_params(self, monkeypatch, params, attribute, expected):
+        monkeypatch.setattr(sys, "argv", ["run_openmeteo_thresholds.py"])
+
+        args = script.parse_args(self._source(params))
+
+        assert getattr(args, attribute) == expected

@@ -6,10 +6,10 @@ import pytest
 import requests.exceptions
 
 from downloader.usgs_volcano import (
-    NCEI_API_URL,
+    DEFAULT_NCEI_API_URL,
+    DEFAULT_NOTICE_API_URL,
     NCEI_REFERENCE_FIELDS,
     NCEI_STAMPED_COLUMNS,
-    NOTICE_API_URL,
     USGSVolcanoDownloader,
     _ncei_number,
     _notice_key,
@@ -62,7 +62,7 @@ EXPECTED_COLUMNS = [
 ]
 
 
-def _downloader(tmp_path, logger=None, ncei_rows=None, reverse_geocode_file=None):
+def _downloader(tmp_path, logger=None, ncei_rows=None, reverse_geocode_file=None, **kwargs):
     """Downloader whose NCEI reference lives in *tmp_path* (seeded, never fetched)."""
     reference = tmp_path / "usgs_volcano_ncei_eruptions.csv"
     with open(reference, "w", newline="", encoding="utf-8") as handle:
@@ -75,6 +75,7 @@ def _downloader(tmp_path, logger=None, ncei_rows=None, reverse_geocode_file=None
         notices_file=str(tmp_path / "usgs_volcano_notices.csv"),
         ncei_eruptions_file=str(reference),
         reverse_geocode_file=reverse_geocode_file,
+        **kwargs,
     )
 
 
@@ -186,6 +187,25 @@ def test_build_record_empty():
     assert record["volcano_name"] == ""
     assert record["alert_level"] == ""
     assert record["notice_date"] == ""
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "attribute", "expected"),
+    [
+        ({"notice_api_url": "https://example.test/notice"}, "notice_api_url", "https://example.test/notice"),
+        ({"ncei_page_size": 50}, "ncei_page_size", 50),
+    ],
+    ids=["notice-api-url", "ncei-page-size"],
+)
+def test_operational_knobs_are_configurable(kwargs, attribute, expected):
+    downloader = USGSVolcanoDownloader(logger=MockLogger(), **kwargs)
+
+    assert getattr(downloader, attribute) == expected
+
+
+def test_non_positive_ncei_page_size_is_rejected():
+    with pytest.raises(ValueError, match="ncei_page_size must be positive"):
+        USGSVolcanoDownloader(logger=MockLogger(), ncei_page_size=0)
 
 
 def test_download_by_date_range_success(tmp_path):
@@ -374,8 +394,13 @@ class TestLookupFile:
 
 
 class TestFetchNotice:
-    def test_returns_the_json_body(self, tmp_path):
-        downloader = _downloader(tmp_path)
+    @pytest.mark.parametrize(
+        "notice_api_url",
+        [DEFAULT_NOTICE_API_URL, "https://example.test/notice"],
+        ids=["default", "configured"],
+    )
+    def test_returns_the_json_body(self, tmp_path, notice_api_url):
+        downloader = _downloader(tmp_path, notice_api_url=notice_api_url)
         response = _notice_response()
         response.json.return_value = PAYLOAD
 
@@ -383,7 +408,7 @@ class TestFetchNotice:
             assert downloader._fetch_notice(NOTICE_ID) == PAYLOAD
 
         mocked.assert_called_once()
-        assert mocked.call_args.args[0] == f"{NOTICE_API_URL}/{NOTICE_ID}"
+        assert mocked.call_args.args[0] == f"{notice_api_url}/{NOTICE_ID}"
         response.close.assert_called_once()
 
     def test_connection_error_raises_runtime_error(self, tmp_path):
@@ -669,6 +694,19 @@ class TestFetchNcei:
         ):
             downloader._fetch_ncei()
 
+    def test_uses_the_configured_page_size(self, tmp_path):
+        downloader = USGSVolcanoDownloader(
+            logger=MockLogger(), ncei_eruptions_file=str(tmp_path / "ncei.csv"), ncei_page_size=50
+        )
+
+        with (
+            patch.object(downloader, "_get_json", return_value=self._page([], 1, 1)) as mocked,
+            pytest.raises(RuntimeError, match="came back empty"),
+        ):
+            downloader._fetch_ncei()
+
+        assert "size=50&page=1" in mocked.call_args.args[0]
+
 
 class TestStampNcei:
     def test_appends_the_three_columns_with_values(self, tmp_path):
@@ -778,5 +816,5 @@ class TestEnsureAuxiliaryFiles:
     def test_the_default_endpoint_is_the_ncei_hazel_api(self):
         downloader = USGSVolcanoDownloader(logger=MockLogger())
 
-        assert downloader.ncei_api_url == NCEI_API_URL
+        assert downloader.ncei_api_url == DEFAULT_NCEI_API_URL
         assert downloader.ncei_api_url.endswith("/hazard-service/api/v1/volcanoes")

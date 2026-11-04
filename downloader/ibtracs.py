@@ -16,35 +16,6 @@ import requests
 from downloader.base import BaseDownloader
 from reverse_geocode import stamp_geocode
 
-GEOCODE_DISTANCE_KM = 100
-# The upstream CSV is ~12 MiB. Read it in MiB chunks (the requests default is 512 bytes)
-# and log progress so a stalled/slow transfer is visible in the Airflow task log.
-DOWNLOAD_CHUNK_SIZE = 1024 * 1024
-# A single attempt gets a wall-clock budget instead of relying only on the per-read
-# socket timeout: a stream that trickles below that timeout can otherwise outlive the
-# Airflow execution_timeout. Three bounded attempts stay well inside the 30-minute task
-# budget while still riding out a transient NCEI stall.
-DOWNLOAD_TIMEOUT_SECONDS = 300
-DOWNLOAD_ATTEMPTS = 3
-DOWNLOAD_RETRY_BACKOFF_SECONDS = 5.0
-PROGRESS_LOG_BYTES = 2 * 1024 * 1024
-
-
-def _near_land(record: dict) -> bool:
-    """Whether the row sits within :data:`GEOCODE_DISTANCE_KM` of land.
-
-    Mirrors the ETL's comparison, which reads ``dist2land`` after the
-    raw2plain integer cast — ``"100.9"`` counts as near-land there, so the
-    truncation happens here too. Blank or unusable distances never match.
-    """
-    value = str(record.get("DIST2LAND") or "").strip()
-    if not value:
-        return False
-    try:
-        return int(float(value)) <= GEOCODE_DISTANCE_KM
-    except ValueError:
-        return False
-
 
 class IBTrACSDownloader(BaseDownloader):
     """Downloads global tropical cyclone best-track data from NOAA IBTrACS.
@@ -65,14 +36,25 @@ class IBTrACSDownloader(BaseDownloader):
 
     Every row's point is stamped with ``geocode_country``/``geocode_state``
     (shared lookup ``data/reverse_geocode.csv``): only rows within
-    :data:`GEOCODE_DISTANCE_KM` of land may query the API — an open-ocean
+    ``geocode_distance_km`` of land may query the API — an open-ocean
     coordinate always answers with no country anyway — but cached answers of
     far rows are stamped too, which is exactly what the ETL used to embed.
     """
 
     ISO_TIME_COLUMN = "ISO_TIME"
 
-    __slots__ = ("_cache_path", "_cache_url", "_dataset", "_temp_dir", "download_timeout")
+    __slots__ = (
+        "_cache_path",
+        "_cache_url",
+        "_dataset",
+        "_download_attempts",
+        "_download_chunk_size",
+        "_download_timeout",
+        "_geocode_distance_km",
+        "_progress_log_bytes",
+        "_retry_backoff_seconds",
+        "_temp_dir",
+    )
 
     def __init__(
         self,
@@ -81,15 +63,35 @@ class IBTrACSDownloader(BaseDownloader):
         log_folder: str | None = None,
         dataset: str = "last3years",
         reverse_geocode_file: str | None = None,
-        download_timeout: int = DOWNLOAD_TIMEOUT_SECONDS,
+        geocode_distance_km: int = 100,
+        download_timeout: int = 300,
+        download_chunk_size: int = 1024 * 1024,
+        download_attempts: int = 3,
+        download_retry_backoff_seconds: float = 5.0,
+        progress_log_bytes: int = 2 * 1024 * 1024,
     ):
         super().__init__(
             timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
         )
-        if download_timeout <= 0:
-            raise ValueError("download_timeout must be positive")
+        settings = {
+            "geocode_distance_km": geocode_distance_km,
+            "download_timeout": download_timeout,
+            "download_chunk_size": download_chunk_size,
+            "download_attempts": download_attempts,
+            "download_retry_backoff_seconds": download_retry_backoff_seconds,
+            "progress_log_bytes": progress_log_bytes,
+        }
+        for name, value in settings.items():
+            if value <= 0:
+                raise ValueError(f"{name} must be positive")
+
         self._dataset = dataset
-        self.download_timeout = download_timeout
+        self._geocode_distance_km = geocode_distance_km
+        self._download_timeout = download_timeout
+        self._download_chunk_size = download_chunk_size
+        self._download_attempts = download_attempts
+        self._retry_backoff_seconds = download_retry_backoff_seconds
+        self._progress_log_bytes = progress_log_bytes
         self._cache_path: str | None = None
         self._cache_url: str | None = None
         self._temp_dir: str | None = None
@@ -97,6 +99,21 @@ class IBTrACSDownloader(BaseDownloader):
     def _build_url(self, base_url: str) -> str:
         """Build the download URL for the IBTrACS dataset."""
         return f"{base_url}/ibtracs.{self._dataset}.list.v04r01.csv"
+
+    def _near_land(self, record: dict) -> bool:
+        """Whether the row sits within ``geocode_distance_km`` of land.
+
+        Mirrors the ETL's comparison, which reads ``dist2land`` after the
+        raw2plain integer cast — ``"100.9"`` counts as near-land there, so the
+        truncation happens here too. Blank or unusable distances never match.
+        """
+        value = str(record.get("DIST2LAND") or "").strip()
+        if not value:
+            return False
+        try:
+            return int(float(value)) <= self._geocode_distance_km
+        except ValueError:
+            return False
 
     def _ensure_temp_dir(self) -> str:
         """Create (once) the temporary directory that holds this run's dataset file."""
@@ -106,7 +123,7 @@ class IBTrACSDownloader(BaseDownloader):
         return self._temp_dir
 
     def _download_to(self, url: str, path: str) -> None:
-        """Stream *url* to *path* within :attr:`download_timeout`.
+        """Stream *url* to *path* within its configured download budget.
 
         Raises:
             requests.exceptions.RequestException: On an HTTP/network error, an
@@ -121,20 +138,20 @@ class IBTrACSDownloader(BaseDownloader):
             response = self.session.get(url, timeout=(self.timeout, self.timeout), stream=True)
             response.raise_for_status()
             with open(path, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+                for chunk in response.iter_content(chunk_size=self._download_chunk_size):
                     if not chunk:
                         continue
                     handle.write(chunk)
                     downloaded += len(chunk)
                     elapsed = time.monotonic() - started
 
-                    if downloaded - last_logged >= PROGRESS_LOG_BYTES:
+                    if downloaded - last_logged >= self._progress_log_bytes:
                         last_logged = downloaded
                         self.logger.info(f"IBTrACS download progress: {downloaded / 1024**2:.0f} MiB in {elapsed:.0f}s")
 
-                    if elapsed > self.download_timeout:
+                    if elapsed > self._download_timeout:
                         raise requests.exceptions.Timeout(
-                            f"exceeded the {self.download_timeout}s download budget "
+                            f"exceeded the {self._download_timeout}s download budget "
                             f"after {downloaded / 1024**2:.1f} MiB"
                         )
 
@@ -160,10 +177,10 @@ class IBTrACSDownloader(BaseDownloader):
             return
 
         def _expired(_signum: int, _frame: object) -> None:
-            raise requests.exceptions.Timeout(f"exceeded the {self.download_timeout}s download budget")
+            raise requests.exceptions.Timeout(f"exceeded the {self._download_timeout}s download budget")
 
         previous_handler = signal.signal(signal.SIGALRM, _expired)
-        signal.setitimer(signal.ITIMER_REAL, self.download_timeout)
+        signal.setitimer(signal.ITIMER_REAL, self._download_timeout)
         try:
             self._download_to(url, path)
         finally:
@@ -174,7 +191,7 @@ class IBTrACSDownloader(BaseDownloader):
         """Return a local copy of the dataset CSV, downloading it at most once per run.
 
         The file is reused by every day of a multi-day range. A failed or
-        over-budget transfer is retried :data:`DOWNLOAD_ATTEMPTS` times from
+        over-budget transfer is retried ``download_attempts`` times from
         scratch; after the last failure ``None`` is returned and the caller
         treats it like any other fetch error (no records for that day).
         """
@@ -182,7 +199,7 @@ class IBTrACSDownloader(BaseDownloader):
             self.logger.info(f"Using the IBTrACS CSV already downloaded in this run: {self._cache_path}")
             return self._cache_path
 
-        for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        for attempt in range(1, self._download_attempts + 1):
             path = os.path.join(self._ensure_temp_dir(), "ibtracs.csv")
             try:
                 self.logger.info(f"Downloading IBTrACS data from: {url}")
@@ -190,12 +207,12 @@ class IBTrACSDownloader(BaseDownloader):
             except requests.exceptions.RequestException as error:
                 if os.path.exists(path):
                     os.remove(path)
-                if attempt >= DOWNLOAD_ATTEMPTS:
-                    self.logger.error(f"Failed to fetch IBTrACS after {DOWNLOAD_ATTEMPTS} attempts: {error}")
+                if attempt >= self._download_attempts:
+                    self.logger.error(f"Failed to fetch IBTrACS after {self._download_attempts} attempts: {error}")
                     return None
-                delay = DOWNLOAD_RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1)
+                delay = self._retry_backoff_seconds * 2 ** (attempt - 1)
                 self.logger.warning(
-                    f"IBTrACS download attempt {attempt}/{DOWNLOAD_ATTEMPTS} failed ({error}) — "
+                    f"IBTrACS download attempt {attempt}/{self._download_attempts} failed ({error}) — "
                     f"retrying in {delay:.0f}s"
                 )
                 time.sleep(delay)
@@ -283,7 +300,7 @@ class IBTrACSDownloader(BaseDownloader):
             output=self.reverse_geocode_file,
             latitude_key="LAT",
             longitude_key="LON",
-            fetch_filter=_near_land,
+            fetch_filter=self._near_land,
             embed_all=True,
             logger=self.logger,
         )

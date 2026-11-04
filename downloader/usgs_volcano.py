@@ -12,8 +12,9 @@ import requests
 from downloader.base import BaseDownloader
 from reverse_geocode import stamp_geocode
 
-NOTICE_API_URL = "https://volcanoes.usgs.gov/hans-public/api/notice/getNotice"
-NCEI_API_URL = "https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/volcanoes"
+DEFAULT_NOTICE_API_URL = "https://volcanoes.usgs.gov/hans-public/api/notice/getNotice"
+DEFAULT_NCEI_API_URL = "https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/volcanoes"
+DEFAULT_NCEI_PAGE_SIZE = 200
 
 NCEI_REFERENCE_FIELDS = [
     "id",
@@ -30,7 +31,6 @@ NCEI_REFERENCE_FIELDS = [
     "damage_millions_dollars",
 ]
 NCEI_STAMPED_COLUMNS = ["vei", "casualties", "damage"]
-_NCEI_PAGE_SIZE = 200
 
 
 class _NceiAgg(TypedDict):
@@ -190,14 +190,20 @@ class USGSVolcanoDownloader(BaseDownloader):
         notices_file: str | None = None,
         reverse_geocode_file: str | None = None,
         ncei_eruptions_file: str | None = None,
-        ncei_api_url: str = NCEI_API_URL,
+        notice_api_url: str = DEFAULT_NOTICE_API_URL,
+        ncei_api_url: str = DEFAULT_NCEI_API_URL,
+        ncei_page_size: int = DEFAULT_NCEI_PAGE_SIZE,
     ):
         super().__init__(
             timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
         )
+        if ncei_page_size <= 0:
+            raise ValueError("ncei_page_size must be positive")
         self.notices_file = notices_file or self.DEFAULT_NOTICES_FILE
         self.ncei_eruptions_file = ncei_eruptions_file or self.DEFAULT_NCEI_FILE
+        self.notice_api_url = notice_api_url
         self.ncei_api_url = ncei_api_url
+        self.ncei_page_size = ncei_page_size
         self._ncei: dict[str, dict[str, str]] | None = None
 
     @staticmethod
@@ -283,7 +289,7 @@ class USGSVolcanoDownloader(BaseDownloader):
                 object (no network, HTTP error, bad body).
         """
         try:
-            with self.session.get(f"{NOTICE_API_URL}/{notice_identifier}", timeout=self.timeout) as response:
+            with self.session.get(f"{self.notice_api_url}/{notice_identifier}", timeout=self.timeout) as response:
                 response.raise_for_status()
                 data = response.json()
         except requests.RequestException as exc:
@@ -375,7 +381,7 @@ class USGSVolcanoDownloader(BaseDownloader):
         collected: list[dict[str, str]] = []
         page = 1
         while True:
-            data = self._get_json(f"{self.ncei_api_url}?size={_NCEI_PAGE_SIZE}&page={page}")
+            data = self._get_json(f"{self.ncei_api_url}?size={self.ncei_page_size}&page={page}")
             if not isinstance(data, dict):
                 raise RuntimeError(f"NCEI eruption fetch failed on page {page} ({self.ncei_api_url})")
             for item in data.get("items") or []:

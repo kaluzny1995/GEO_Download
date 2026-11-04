@@ -92,7 +92,12 @@ The application is configured via `config.json`. Each data source is defined und
       "is_date_to_previous_day": true,
       "params": {
         "dataset": "last3years",
-        "download_timeout": 300
+        "geocode_distance_km": 100,
+        "download_timeout": 300,
+        "download_chunk_size": 1048576,
+        "download_attempts": 3,
+        "download_retry_backoff_seconds": 5.0,
+        "progress_log_bytes": 2097152
       }
     },
     "USGS_Volcano": {
@@ -154,17 +159,31 @@ Unknown keys raise `TypeError` when the downloader is constructed (the chain abo
 | `GDACS` | `page_size` | `int` — `100` | Events per API page (the downloader pages until exhausted). |
 | `OpenMeteo_Flood` | `rivers_file` | `str` — `data/rivers.json` | Rivers reference file used to build the query. |
 | `OpenMeteo_Flood` | `thresholds_file` | `str` — `data/openmeteo_discharge_thresholds.csv` | Discharge threshold reference GEO_ETL joins; the download builds it when missing, `run_openmeteo_thresholds.py` refreshes it. |
+| `OpenMeteo_Flood` | `threshold_baseline_start` | `str` — `2026-09-01` | First day of the baseline used to compute the discharge percentiles. |
+| `OpenMeteo_Flood` | `threshold_min_days` | `int` — `30` | Rivers with fewer valid baseline days get no threshold row. |
+| `OpenMeteo_Flood` | `threshold_sleep_seconds` | `float` — `1.0` | Pause after each threshold-baseline request (the API throttles full-history pulls). |
+| `OpenMeteo_Flood` | `threshold_max_hour_waits` | `int` — `1` | Clock hours the download waits out when the threshold API rate limit is reached. |
+| `OpenMeteo_Flood` | `threshold_progress_every_rivers` | `int` — `20` | Log a threshold-build progress line every N rivers. |
 | `USGS_NWIS` | `sites` | `str` — `01646500` | Gauge site ID(s) sent as the `sites=` query parameter. |
 | `USGS_NWIS` | `parameter_code` | `str` — `00060` | Discharge parameter(s) sent as `parameterCd=` (`00060` = discharge, cfs); one row per gauge and day per code. |
 | `USGS_NWIS` | `stage_parameter_code` | `str` — `00065` | Gauge-height parameter (`00065`, ft) requested with the discharge and aggregated into `gauge_height`; empty disables the stage column. |
 | `USGS_NWIS` | `nwps_api_url` | `str` — `https://api.water.noaa.gov/nwps/v1/gauges` | NWS gauge endpoint the flood-category thresholds are read from, one request per gauge. |
 | `USGS_NWIS` | `flood_categories_file` | `str` — `data/usgs_flood_categories.csv` | NWS flood-stage reference GEO_ETL joins; the download adds a gauge missing from it and leaves a covered gauge alone. |
 | `IBTrACS` | `dataset` | `str` — `last3years` | IBTrACS dataset slice to download. |
-| `IBTrACS` | `download_timeout` | `int` — `300` | Wall-clock budget in seconds for one full-file transfer attempt. A stalled/slow stream is aborted at this limit and retried (three bounded attempts); progress is logged every 2 MiB. |
+| `IBTrACS` | `geocode_distance_km` | `int` — `100` | Maximum `DIST2LAND` (km) for a row to query the reverse-geocode API; farther rows only reuse cached answers. |
+| `IBTrACS` | `download_timeout` | `int` — `300` | Wall-clock budget in seconds for one full-file transfer attempt, including connect/TLS. A stalled/slow stream is aborted at this limit and retried. |
+| `IBTrACS` | `download_chunk_size` | `int` — `1048576` | Response read size in bytes (1 MiB); smaller values add read overhead on a slow link. |
+| `IBTrACS` | `download_attempts` | `int` — `3` | Bounded number of full-file attempts (the shipped 3 × 300 s fits inside Airflow's 30-minute task timeout). |
+| `IBTrACS` | `download_retry_backoff_seconds` | `float` — `5.0` | Initial retry delay; it doubles after every failed attempt. |
+| `IBTrACS` | `progress_log_bytes` | `int` — `2097152` | Log a progress line every N transferred bytes (2 MiB by default). |
 | `Avalanche_ORG` | `notices_file` | `str` — `data/avalanche_org_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
 | `USGS_Volcano` | `notices_file` | `str` — `data/usgs_volcano_notices.csv` | Local notices CSV stamped onto the downloaded rows. |
 | `USGS_Volcano` | `ncei_eruptions_file` | `str` — `data/usgs_volcano_ncei_eruptions.csv` | NCEI Significant Volcanic Eruptions reference stamped into `vei`, `casualties` and `damage`; the download builds it when missing. |
+| `USGS_Volcano` | `notice_api_url` | `str` — `https://volcanoes.usgs.gov/hans-public/api/notice/getNotice` | HANS notice endpoint the per-notice details are fetched from. |
 | `USGS_Volcano` | `ncei_api_url` | `str` — `https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/volcanoes` | NCEI HazEL endpoint the eruption reference is fetched from. |
+| `USGS_Volcano` | `ncei_page_size` | `int` — `200` | Eruption rows per NCEI page while building the reference. |
 | `NIFC` | `unit_names_file` | `str` — `data/nifc_unit_names.csv` | Fire-unit name lookup CSV. |
+| `NIFC` | `jurisdiction_api_url` | `str` — `…/DMP_JurisdictionalUnits_Public/FeatureServer/0/query` | ArcGIS jurisdiction layer used to resolve unknown unit codes. |
+| `NIFC` | `result_record_count` | `int` — `2000` | `resultRecordCount` sent to the WFIGS perimeter query. |
 
 `USGS_Earthquake` and `EONET` have no source-specific keys (`"params": {}` in the shipped config).

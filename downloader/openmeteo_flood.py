@@ -52,12 +52,28 @@ class OpenMeteoFloodDownloader(BaseDownloader):
         rivers_file: str | None = None,
         thresholds_file: str | None = None,
         reverse_geocode_file: str | None = None,
+        threshold_baseline_start: str = "2026-09-01",
+        threshold_min_days: int = 30,
+        threshold_sleep_seconds: float = 1.0,
+        threshold_max_hour_waits: int = 1,
+        threshold_progress_every_rivers: int = 20,
     ):
         super().__init__(
             timeout=timeout, logger=logger, log_folder=log_folder, reverse_geocode_file=reverse_geocode_file
         )
+        if threshold_min_days <= 0:
+            raise ValueError("threshold_min_days must be positive")
+        if threshold_max_hour_waits < 0:
+            raise ValueError("threshold_max_hour_waits must be non-negative")
+        if threshold_progress_every_rivers <= 0:
+            raise ValueError("threshold_progress_every_rivers must be positive")
         self._rivers_file = rivers_file or self.DEFAULT_RIVERS_FILE
         self.thresholds_file = thresholds_file or self.DEFAULT_THRESHOLDS_FILE
+        self.threshold_baseline_start = threshold_baseline_start
+        self.threshold_min_days = threshold_min_days
+        self.threshold_sleep_seconds = threshold_sleep_seconds
+        self.threshold_max_hour_waits = threshold_max_hour_waits
+        self._threshold_progress_every_rivers = threshold_progress_every_rivers
         self._rivers = self._load_rivers()
 
     def _load_rivers(self) -> list[dict]:
@@ -150,7 +166,7 @@ class OpenMeteoFloodDownloader(BaseDownloader):
                     all_records.extend(records)
                     rivers_with_data += 1
 
-            if i % 20 == 0:
+            if i % self._threshold_progress_every_rivers == 0:
                 self.logger.info(f"  Progress: {i}/{len(self._rivers)} rivers queried")
 
         stamp_geocode(all_records, output=self.reverse_geocode_file, logger=self.logger)
@@ -188,37 +204,39 @@ class OpenMeteoFloodDownloader(BaseDownloader):
             return
 
         # Local import: run_openmeteo_thresholds imports this module for the downloader.
-        from run_openmeteo_thresholds import (
-            DEFAULT_BASELINE_START,
-            DEFAULT_MIN_DAYS,
-            DEFAULT_SLEEP,
-            build_thresholds,
-            make_fetcher,
-            write_thresholds,
-        )
+        from run_openmeteo_thresholds import build_thresholds, make_fetcher, write_thresholds
 
         baseline_end = dt.date.today().isoformat()
         self.logger.info(
             f"Threshold reference {self.thresholds_file} missing — building it from "
-            f"{DEFAULT_BASELINE_START} to {baseline_end}"
+            f"{self.threshold_baseline_start} to {baseline_end}"
         )
         print(
             f"Threshold reference {self.thresholds_file} is missing — building it "
-            f"({DEFAULT_BASELINE_START}..{baseline_end})...",
+            f"({self.threshold_baseline_start}..{baseline_end})...",
             flush=True,
         )
 
-        start = dt.datetime.strptime(DEFAULT_BASELINE_START, "%Y-%m-%d")
+        start = dt.datetime.strptime(self.threshold_baseline_start, "%Y-%m-%d")
         end = dt.datetime.strptime(baseline_end, "%Y-%m-%d")
-        fetch = make_fetcher(self, api_url, start, end, self.logger, sleep=DEFAULT_SLEEP, max_hour_waits=1)
+        fetch = make_fetcher(
+            self,
+            api_url,
+            start,
+            end,
+            self.logger,
+            sleep=self.threshold_sleep_seconds,
+            max_hour_waits=self.threshold_max_hour_waits,
+        )
         rows = build_thresholds(
             self,
             api_url,
-            DEFAULT_BASELINE_START,
+            self.threshold_baseline_start,
             baseline_end,
-            DEFAULT_MIN_DAYS,
+            self.threshold_min_days,
             self.logger,
             fetch=fetch,
+            progress_every=self._threshold_progress_every_rivers,
         )
         if not rows:
             message = (

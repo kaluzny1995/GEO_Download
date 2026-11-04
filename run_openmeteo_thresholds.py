@@ -241,19 +241,35 @@ def parse_args(source: SourceConfig) -> argparse.Namespace:
         default=source.params.get("thresholds_file", DEFAULT_OUTPUT),
         help="reference CSV to write (read by GEO_ETL through config.json)",
     )
-    parser.add_argument("--baseline-start", default=DEFAULT_BASELINE_START, help="first day of the baseline record")
+    parser.add_argument(
+        "--baseline-start",
+        default=source.params.get("threshold_baseline_start", DEFAULT_BASELINE_START),
+        help="first day of the baseline record (from config.json)",
+    )
     parser.add_argument("--baseline-end", default=None, help="last day of the baseline record (default: today)")
     parser.add_argument(
         "--min-days",
         type=int,
-        default=DEFAULT_MIN_DAYS,
+        default=source.params.get("threshold_min_days", DEFAULT_MIN_DAYS),
         help="skip rivers with fewer valid days than this (no reliable percentile)",
     )
     parser.add_argument(
         "--sleep",
         type=float,
-        default=DEFAULT_SLEEP,
+        default=source.params.get("threshold_sleep_seconds", DEFAULT_SLEEP),
         help="seconds to pause between two river requests (the API throttles full-history pulls)",
+    )
+    parser.add_argument(
+        "--max-hour-waits",
+        type=int,
+        default=source.params.get("threshold_max_hour_waits", 6),
+        help="clock hours to wait out when the API rate limit is reached",
+    )
+    parser.add_argument(
+        "--progress-every-rivers",
+        type=int,
+        default=source.params.get("threshold_progress_every_rivers", 20),
+        help="log a progress line every N rivers",
     )
     parser.add_argument(
         "--restart",
@@ -331,6 +347,7 @@ def build_thresholds(
     fetch: Callable[[dict], dict | None] | None = None,
     existing: list[dict] | None = None,
     on_row: Callable[[list[dict]], None] | None = None,
+    progress_every: int = 20,
 ) -> list[dict]:
     """Pull the baseline of every river and reduce it to reference rows.
 
@@ -348,6 +365,7 @@ def build_thresholds(
             again and they keep their place at the front of the result.
         on_row: Called with the full row list after every river that added
             one, so the output file survives a killed run.
+        progress_every: Log a progress line every N rivers.
 
     Returns:
         One reference row per river with enough baseline data, in river order.
@@ -379,7 +397,7 @@ def build_thresholds(
             if on_row is not None:
                 on_row(rows)
 
-        if index % 20 == 0:
+        if index % progress_every == 0:
             print(f"  {index}/{len(downloader._rivers)} rivers processed...", flush=True)
             logger.info(f"  Progress: {index}/{len(downloader._rivers)} rivers queried")
 
@@ -431,7 +449,9 @@ def main() -> int:
 
     start = dt.datetime.strptime(args.baseline_start, "%Y-%m-%d")
     end = dt.datetime.strptime(baseline_end, "%Y-%m-%d")
-    fetch = make_fetcher(downloader, source.api_url, start, end, logger, sleep=args.sleep)
+    fetch = make_fetcher(
+        downloader, source.api_url, start, end, logger, sleep=args.sleep, max_hour_waits=args.max_hour_waits
+    )
     rows = build_thresholds(
         downloader,
         source.api_url,
@@ -442,6 +462,7 @@ def main() -> int:
         fetch=fetch,
         existing=existing,
         on_row=lambda current: write_thresholds(current, args.output),
+        progress_every=args.progress_every_rivers,
     )
     write_thresholds(rows, args.output)
 

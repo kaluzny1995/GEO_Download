@@ -46,13 +46,13 @@ SAMPLE_API_RESPONSE_EMPTY = {
 }
 
 
-def _create_downloader(rivers=None, logger=None, thresholds_file=None):
+def _create_downloader(rivers=None, logger=None, thresholds_file=None, **kwargs):
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(rivers or SAMPLE_RIVERS, f)
         temp_path = f.name
     try:
         return create_downloader(
-            OpenMeteoFloodDownloader, logger, rivers_file=temp_path, thresholds_file=thresholds_file
+            OpenMeteoFloodDownloader, logger, rivers_file=temp_path, thresholds_file=thresholds_file, **kwargs
         )
     finally:
         os.unlink(temp_path)
@@ -65,6 +65,20 @@ def test_load_rivers():
     # Assert
     assert len(downloader._rivers) == 3
     assert downloader._rivers[0]["name"] == "Danube"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"threshold_min_days": 0}, "threshold_min_days must be positive"),
+        ({"threshold_max_hour_waits": -1}, "threshold_max_hour_waits must be non-negative"),
+        ({"threshold_progress_every_rivers": 0}, "threshold_progress_every_rivers must be positive"),
+    ],
+    ids=["min-days", "max-hour-waits", "progress-interval"],
+)
+def test_invalid_threshold_knobs_are_rejected(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        _create_downloader(**kwargs)
 
 
 def test_build_records():
@@ -354,6 +368,30 @@ class TestEnsureAuxiliaryFiles:
         assert captured["end"] == dt.datetime.strptime(dt.date.today().isoformat(), "%Y-%m-%d")
         assert captured["max_hour_waits"] == 1
         assert any("missing" in msg and "building it" in msg for _, msg in logger.messages)
+
+    def test_threshold_build_uses_the_configured_values(self, tmp_path, monkeypatch):
+        logger = MockLogger()
+        output = tmp_path / "openmeteo_discharge_thresholds.csv"
+        downloader = _create_downloader(
+            logger=logger,
+            thresholds_file=str(output),
+            threshold_baseline_start="2026-08-01",
+            threshold_min_days=30,
+            threshold_sleep_seconds=0.5,
+            threshold_max_hour_waits=3,
+            threshold_progress_every_rivers=1,
+        )
+        captured = _stub_fetcher(monkeypatch, lambda: _baseline_response(start=dt.date(2026, 8, 1)))
+
+        downloader.ensure_auxiliary_files("https://flood-api.test/v1/flood")
+
+        with open(output, newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        assert rows[0]["baseline_start"] == "2026-08-01"
+        assert captured["start"] == dt.datetime(2026, 8, 1)
+        assert captured["sleep"] == 0.5
+        assert captured["max_hour_waits"] == 3
+        assert any("Progress: 1/3 rivers queried" in msg for _, msg in logger.messages)
 
     def test_an_empty_remnant_of_a_crashed_write_is_rebuilt(self, tmp_path, monkeypatch):
         logger = MockLogger()
