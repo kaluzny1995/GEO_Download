@@ -63,7 +63,7 @@ The script counts every source of `config.json`, writes the rows to [source_coun
 - **Threshold reference** — `run_openmeteo_thresholds.py` pulls each river's baseline window in one request and writes its discharge percentiles (p50/p90/p95/p99) to `data/openmeteo_discharge_thresholds.csv`, the baseline GEO_ETL joins on every day to fill `danger_rating` and `other_metrics`; `run_download.py OpenMeteo_Flood` creates the file when it is missing and leaves it alone afterwards.
 - **Frozen Pydantic models** — all configuration and parameter objects are immutable.
 - **Data inventory** — `run_source_counts.py` counts the files and records every source has under `data/`, writes them to [source_counts.csv](source_counts.csv) and refreshes the [Data inventory](#data-inventory) table in this README.
-- **Structured logging** — each run produces a timestamped log file under `logs/<SourceName>/`.
+- **Structured logging** — each run produces a timestamped log file under `logs/<SourceName>/`; the folder is created atomically, so concurrent Airflow tasks sharing it cannot race.
 - **Fails on an empty run** — a run exits `0` only when at least one CSV was written (or the local data is already current); a run that requested days but saved nothing raises `RuntimeError` (traceback, exit code `1`), so a chained pipeline (GEO_E2E) stops instead of ingesting stale files.
 - **CLI interface** — source selection via command-line arguments.
 

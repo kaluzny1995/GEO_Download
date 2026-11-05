@@ -1,5 +1,6 @@
 import datetime as dt
 import logging
+import os
 import sys
 
 import pytest
@@ -122,3 +123,33 @@ def test_setup_logger_no_duplicate_handlers(tmp_path):
     ]
     assert len(file_handlers) == 1
     assert len(stream_handlers) == 1
+
+
+def test_setup_logger_survives_concurrent_directory_creation(tmp_path, monkeypatch):
+    """A concurrent task creating the log folder must not crash the logger.
+
+    Simulate the TOCTOU window: the folder exists but the logger's existence check
+    still reports it missing, as if another task had just created it between the
+    check and ``makedirs`` (the Airflow download pool runs several sources at once).
+    """
+    # Arrange
+    log_folder = tmp_path / "logs" / "USGS_Earthquake"
+    log_folder.mkdir(parents=True)
+    real_exists = os.path.exists
+
+    def racing_exists(path):
+        if os.path.abspath(path) == os.path.abspath(log_folder):
+            return False
+        return real_exists(path)
+
+    monkeypatch.setattr("util.os.path.exists", racing_exists)
+    log_file = str(log_folder / "download.log")
+
+    # Act
+    logger = util.setup_logger(name="test_setup_logger_race", log_file=log_file)
+    logger.info("survived the race")
+
+    # Assert
+    assert os.path.exists(log_file)
+    with open(log_file) as f:
+        assert "survived the race" in f.read()

@@ -1,4 +1,5 @@
 import datetime as dt
+import os
 import sys
 
 import pytest
@@ -53,6 +54,29 @@ def _load_params(output_folder: str) -> LoadParams:
     """A three-day load range ending yesterday."""
     yesterday = dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(days=1)
     return LoadParams(load_type=ELoadType.INCREMENTAL, date_from=yesterday - dt.timedelta(days=2), date_to=yesterday)
+
+
+def test_create_folders_survives_concurrent_directory_creation(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two tasks racing to create the same source folder must not fail the download."""
+    # Arrange — the folder exists, but the existence check still reports it missing,
+    # as if another task had just created it between the check and ``makedirs``.
+    output_folder = tmp_path / "USGS_Earthquake"
+    output_folder.mkdir()
+    source = _source(str(output_folder))
+    real_exists = os.path.exists
+
+    def racing_exists(path):
+        if os.path.abspath(path) == os.path.abspath(output_folder):
+            return False
+        return real_exists(path)
+
+    monkeypatch.setattr(run_download.os.path, "exists", racing_exists)
+
+    # Act
+    run_download.create_folders(source)
+
+    # Assert
+    assert output_folder.is_dir()
 
 
 def test_save_csv_writes_file_and_returns_true(tmp_path) -> None:

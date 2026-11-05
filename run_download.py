@@ -25,9 +25,8 @@ def parse_args(config: AppConfig) -> argparse.Namespace:
 
 
 def create_folders(source: SourceConfig):
-    """Creates folders for data if not exist"""
-    if not os.path.exists(source.output_folder):
-        os.makedirs(source.output_folder)
+    """Creates folders for data if not exist (safe when two tasks race to create them)"""
+    os.makedirs(source.output_folder, exist_ok=True)
 
 
 def show_params(source_name: str, source: SourceConfig, load_params: LoadParams, logger: logging.Logger) -> None:
