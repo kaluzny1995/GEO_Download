@@ -104,7 +104,7 @@ class IBTrACSDownloader(BaseDownloader):
         """Whether the row sits within ``geocode_distance_km`` of land.
 
         Mirrors the ETL's comparison, which reads ``dist2land`` after the
-        raw2plain integer cast — ``"100.9"`` counts as near-land there, so the
+        plain-table integer cast — ``"100.9"`` counts as near-land there, so the
         truncation happens here too. Blank or unusable distances never match.
         """
         value = str(record.get("DIST2LAND") or "").strip()
