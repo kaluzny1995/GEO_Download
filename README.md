@@ -111,14 +111,14 @@ invoked by the Airflow `DOWNLOAD` tasks inside the scheduler container.
 
 ```bash
 cd ../GEO_E2E
-docker compose up -d --build
+./up.sh -d --build          # preflight (six repos + Supabase .env), then compose up
 ```
 
 After changing GEO_Download, rebuild the image:
 
 ```bash
 docker compose build airflow-init
-docker compose up -d
+./up.sh -d
 ```
 
 ### Setup
