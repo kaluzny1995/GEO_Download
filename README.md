@@ -88,6 +88,8 @@ The script counts every source of `config.json`, writes the rows to [source_coun
 | [Data sources](docs/data-sources.md) | Every CSV the app produces — file pattern, row grain and a field-by-field description of all 9 sources (176 IBTrACS columns included). |
 | [Configuration](docs/configuration.md) | Full `config.json` reference — per-source settings, dates, output folders. |
 | [Architecture](docs/architecture.md) | Project layout and how to add a new data source in 4 steps. |
+| [Memory leaks investigation 2026-11-23](docs/memory-leaks-investigation-2026-11-23.md) | Host vs container attribution and the downloader session-close fix. |
+| [Memory leaks investigation 2026-11-24](docs/memory-leaks-investigation-2026-11-24.md) | Follow-up after the daily run: short-lived downloads, flat containers, desktop growth. |
 | [Development](docs/development.md) | Running the tests, Ruff lint/format, tox environments and PyCharm integration. |
 
 ## Usage

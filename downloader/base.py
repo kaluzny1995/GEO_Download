@@ -79,6 +79,25 @@ class BaseDownloader(abc.ABC):
         """
         return None
 
+    def close(self) -> None:
+        """Release the HTTP connection pool held by this downloader.
+
+        Each run downloads one source in a short-lived process, so the OS
+        would close the sockets at exit anyway. Closing explicitly keeps the
+        downloader safe to reuse from a long-lived process (tests, scripts,
+        future multi-source runs) and makes the resource lifetime visible at
+        the call site.
+        """
+        self.session.close()
+
+    def __enter__(self) -> BaseDownloader:
+        """Return this downloader for ``with`` blocks."""
+        return self
+
+    def __exit__(self, *_exc_info: object) -> None:
+        """Close the HTTP session when the ``with`` block ends."""
+        self.close()
+
     @staticmethod
     def _format_date(date: dt.datetime) -> str:
         """Format datetime as YYYY-MM-DD string."""

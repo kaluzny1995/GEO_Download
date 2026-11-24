@@ -166,7 +166,14 @@ def main() -> int:
     dl = get_downloader(source.type, logger=logger, **source.params)
 
     # Download data for each day in the date range (raises when nothing was written)
-    download_source(source, source_name, load_params, dl, logger)
+    try:
+        download_source(source, source_name, load_params, dl, logger)
+    finally:
+        # Close the HTTP connection pool even when the run fails; long-lived callers
+        # (tests, scripts) would otherwise keep sockets and response buffers alive.
+        close = getattr(dl, "close", None)
+        if callable(close):
+            close()
     return 0
 
 

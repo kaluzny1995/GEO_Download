@@ -32,6 +32,27 @@ def test_create_session_identifies_the_client():
     assert session.headers["User-Agent"] == "GEO_Download/1.0"
 
 
+def test_close_releases_the_http_session():
+    """close() closes the requests session so a long-lived caller leaks no sockets."""
+    downloader = USGSEarthquakeDownloader(logger=MockLogger())
+    downloader.session = MagicMock()
+
+    downloader.close()
+
+    downloader.session.close.assert_called_once_with()
+
+
+def test_context_manager_closes_the_http_session():
+    """Leaving a with block closes the session even when the body raises."""
+    downloader = USGSEarthquakeDownloader(logger=MockLogger())
+    downloader.session = MagicMock()
+
+    with pytest.raises(RuntimeError, match="boom"), downloader:
+        raise RuntimeError("boom")
+
+    downloader.session.close.assert_called_once_with()
+
+
 def test_get_json_success():
     logger = MockLogger()
     downloader = USGSEarthquakeDownloader(logger=logger)

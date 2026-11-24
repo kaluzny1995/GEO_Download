@@ -19,6 +19,7 @@ class StubDownloader:
         self.results = results or {}
         self.calls: list[tuple[str, dt.datetime, dt.datetime]] = []
         self.auxiliary_calls: list[str] = []
+        self.closed = False
 
     def download_by_date_range(self, base_url: str, start_date: dt.datetime, end_date: dt.datetime) -> list[dict]:
         """Record the call and return the scripted records for that day."""
@@ -28,6 +29,10 @@ class StubDownloader:
     def ensure_auxiliary_files(self, api_url: str) -> None:
         """Record the hook call — the real downloaders build their ETL references here."""
         self.auxiliary_calls.append(api_url)
+
+    def close(self) -> None:
+        """Record that the runner released the downloader's session."""
+        self.closed = True
 
 
 class FailingAuxiliaryDownloader(StubDownloader):
@@ -244,10 +249,11 @@ def test_main_raises_when_nothing_downloaded(tmp_path, monkeypatch: pytest.Monke
     source = _source(str(tmp_path))
     config = AppConfig(sources={"IBTrACS": source})
     logger = MockLogger()
+    downloader = StubDownloader()
 
     monkeypatch.setattr(run_download.AppConfig, "from_json", staticmethod(lambda: config))
     monkeypatch.setattr(run_download.util, "setup_logger", lambda **kwargs: logger)
-    monkeypatch.setattr(run_download, "get_downloader", lambda *args, **kwargs: StubDownloader())
+    monkeypatch.setattr(run_download, "get_downloader", lambda *args, **kwargs: downloader)
     monkeypatch.setattr(sys, "argv", ["run_download.py", "IBTrACS"])
 
     # Act & Assert
@@ -255,3 +261,4 @@ def test_main_raises_when_nothing_downloaded(tmp_path, monkeypatch: pytest.Monke
         run_download.main()
 
     assert any(level == "ERROR" and "No files downloaded for IBTrACS" in msg for level, msg in logger.messages)
+    assert downloader.closed is True
